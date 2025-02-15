@@ -134,7 +134,7 @@ export class RestAPIStack extends cdk.Stack {
     });
     moviesTable.grantWriteData(deleteMovieFn);
 
-    moviesEndpoint.addMethod(
+    specificMovieEndpoint.addMethod(
       "DELETE",
       new apig.LambdaIntegration(deleteMovieFn, { proxy: true })
     );
