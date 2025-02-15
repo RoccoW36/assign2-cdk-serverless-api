@@ -42,26 +42,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       };
     }
     
-    const movieId = parseInt(queryParams.movieId);
+    const movieId = queryParams.movieId;
     let commandInput: QueryCommandInput = {
       TableName: process.env.TABLE_NAME,
+  
     };
     if ("roleName" in queryParams) {
       commandInput = {
         ...commandInput,
         IndexName: "roleIx",
-        KeyConditionExpression: "movieId = :m and begins_with(roleName, :r) ",
+        KeyConditionExpression: "movieId = :m and begins_with(roleName, :r)",
         ExpressionAttributeValues: {
-          ":m": movieId,
+          ":m": parseInt(queryParams.movieId),
           ":r": queryParams.roleName,
         },
       };
     } else if ("actorName" in queryParams) {
       commandInput = {
         ...commandInput,
-        KeyConditionExpression: "movieId = :m and begins_with(actorName, :a) ",
+        KeyConditionExpression: "movieId = :m and begins_with(actorName, :a)",
         ExpressionAttributeValues: {
-          ":m": movieId,
+          ":m": parseInt(queryParams.movieId),
           ":a": queryParams.actorName,
         },
       };
@@ -70,7 +71,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
         ...commandInput,
         KeyConditionExpression: "movieId = :m",
         ExpressionAttributeValues: {
-          ":m": movieId,
+          ":m": parseInt(queryParams.movieId),
         },
       };
     }

@@ -21,7 +21,7 @@ export class RestAPIStack extends cdk.Stack {
       tableName: "Movies",
     });
 
-    const movieCastsTable = new dynamodb.Table(this, "MovieCastTable", {
+    const movieCastsTable = new dynamodb.Table(this,"MovieCastTable", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: "movieId", type: dynamodb.AttributeType.NUMBER },
       sortKey: { name: "actorName", type: dynamodb.AttributeType.STRING },
@@ -46,7 +46,8 @@ export class RestAPIStack extends cdk.Stack {
         memorySize: 128,
         environment: {
           TABLE_NAME: moviesTable.tableName,
-          REGION: 'eu-west-1',
+          MOVIE_CASTS_TABLE_NAME: movieCastsTable.tableName,
+          REGION: "eu-west-1",
         },
       }
       );
@@ -62,7 +63,7 @@ export class RestAPIStack extends cdk.Stack {
           memorySize: 128,
           environment: {
             TABLE_NAME: moviesTable.tableName,
-            REGION: 'eu-west-1',
+            REGION: "eu-west-1",
           },
         }
         );
@@ -94,7 +95,7 @@ export class RestAPIStack extends cdk.Stack {
         memorySize: 128,
         environment: {
           TABLE_NAME: moviesTable.tableName,
-          REGION: 'eu-west-1',
+          REGION: "eu-west-1",
         },
       }
       );
@@ -110,6 +111,7 @@ export class RestAPIStack extends cdk.Stack {
        memorySize: 128,
        environment: {
           TABLE_NAME: movieCastsTable.tableName,
+          MOVIE_CASTS_TABLE_NAME: movieCastsTable.tableName,
           REGION: "eu-west-1",
        },
      }
@@ -132,14 +134,6 @@ export class RestAPIStack extends cdk.Stack {
           }),
         });
     
-        
-        // Permissions 
-        moviesTable.grantReadData(getMovieByIdFn)
-        moviesTable.grantReadData(getAllMoviesFn)
-        moviesTable.grantReadWriteData(newMovieFn)
-        moviesTable.grantWriteData(deleteMovieFn)
-        movieCastsTable.grantReadData(getMovieCastMembersFn);
-        
         // REST API 
     const api = new apig.RestApi(this, "RestAPI", {
       description: "demo api",
@@ -164,8 +158,12 @@ export class RestAPIStack extends cdk.Stack {
     const specificMovieEndpoint = moviesEndpoint.addResource("{movieId}");
     specificMovieEndpoint.addMethod(
       "GET",
-      new apig.LambdaIntegration(getMovieByIdFn, { proxy: true })
-      
+      new apig.LambdaIntegration(getMovieByIdFn, { proxy: true }),
+      {
+        requestParameters: {
+          'method.request.querystring.cast': false
+        }
+      }
     );
     //Add Movie endpoint
     moviesEndpoint.addMethod(
@@ -183,7 +181,13 @@ export class RestAPIStack extends cdk.Stack {
       "GET",
       new apig.LambdaIntegration(getMovieCastMembersFn, { proxy: true })
     );
-
+        // Permissions 
+        moviesTable.grantReadData(getMovieByIdFn)
+        movieCastsTable.grantReadData(getMovieByIdFn)
+        moviesTable.grantReadData(getAllMoviesFn)
+        moviesTable.grantReadWriteData(newMovieFn)
+        moviesTable.grantWriteData(deleteMovieFn)
+        movieCastsTable.grantReadData(getMovieCastMembersFn);   
     }
     }
-    
+            
