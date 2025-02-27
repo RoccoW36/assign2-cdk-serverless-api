@@ -1,16 +1,15 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+
 
 const ddbDocClient = createDDbDocClient();
-
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {     // Note change
+export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
   try {
     console.log("[EVENT]", JSON.stringify(event));
-    const pathParameters  = event?.pathParameters;
+    const pathParameters = event?.pathParameters;
     const movieId = pathParameters?.movieId ? parseInt(pathParameters.movieId) : undefined;
-
+    const includeCast = event.queryStringParameters?.cast === 'true';
     if (!movieId) {
       return {
         statusCode: 404,
@@ -20,15 +19,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {    
         body: JSON.stringify({ Message: "Missing movie Id" }),
       };
     }
+    
 
-    const commandOutput = await ddbDocClient.send(
+    const movieCommandOutput = await ddbDocClient.send(
       new GetCommand({
         TableName: process.env.TABLE_NAME,
         Key: { id: movieId },
       })
     );
-    console.log("GetCommand response: ", commandOutput);
-    if (!commandOutput.Item) {
+    console.log("GetCommand response: ", movieCommandOutput);
+    if (!movieCommandOutput.Item) {
       return {
         statusCode: 404,
         headers: {
@@ -37,10 +37,24 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {    
         body: JSON.stringify({ Message: "Invalid movie Id" }),
       };
     }
-    const body = {
-      data: commandOutput.Item,
+
+    let body: any = {
+      data: movieCommandOutput.Item,
     };
 
+    if (includeCast) {
+      const castCommandOutput = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: process.env.MOVIE_CASTS_TABLE_NAME,
+          KeyConditionExpression: "movieId = :movieId",
+          ExpressionAttributeValues: {
+            ":movieId": movieId,
+          },
+        })
+      );
+      console.log("QueryCommand response: ", castCommandOutput);
+      body.data.cast = castCommandOutput.Items || [];
+    }
     // Return Response
     return {
       statusCode: 200,
