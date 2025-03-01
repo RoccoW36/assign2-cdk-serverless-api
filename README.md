@@ -1,2 +1,0 @@
-# Serverless REST web API.
-
