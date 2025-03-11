@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
 import schema from "../shared/types.schema.json";
 
@@ -11,41 +11,32 @@ const ddbDocClient = createDDbDocClient();
 export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     try {
       console.log("[EVENT]", JSON.stringify(event));
-      const body = event.body ? JSON.parse(event.body) : undefined;
-      if (!body) {
+      const movieId = event.pathParameters?.movieId;
+      if (!movieId) {
       return {
-        statusCode: 500,
+        statusCode: 400,
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ message: "Missing request body" }),
+        body: JSON.stringify({ message: "Missing movie ID" }),
       };
     }
-    if (!isValidBodyParams(body)) {
-        return {
-          statusCode: 500,
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            message: `Incorrect type. Must match the Movie schema`,
-            schema: schema.definitions["MovieReview"],
-          }),
-        };
-      }
       
+    // Delete the movie from the DynamoDB table
     const commandOutput = await ddbDocClient.send(
-      new PutCommand({
+        new DeleteCommand({
         TableName: process.env.TABLE_NAME,
-        Item: body,
+        Key:{
+          id:parseInt(movieId, 10)
+        }
       })
-    );
+      );
     return {
-      statusCode: 201,
+      statusCode: 200,
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify({ message: "Movie added successfully" }),
+      body: JSON.stringify({ message: "Movie deleted successfully" }),
     };
   } catch (error: any) {
     console.log(JSON.stringify(error));

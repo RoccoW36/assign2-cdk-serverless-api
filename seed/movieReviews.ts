@@ -1,6 +1,6 @@
-import { MovieReview } from '../shared/types'
+import { MovieReviews } from '../shared/types'
 let reviewIdCounter =1;
-export const movieReviews: MovieReview[] = [
+export const movieReviews: MovieReviews[] = [
   {
     movieId: 1234,
     reviewId:reviewIdCounter++,
@@ -148,41 +148,5 @@ export const movieReviews: MovieReview[] = [
     reviewerId: "actionhero@explosionscene.com",
     reviewDate: "2024-10-06",
     content: "Fast X delivers the over-the-top action and spectacle fans of the franchise have come to expect. While the plot may be convoluted, the stunts and set pieces are as thrilling as ever."
-  },
-  {
-    movieId: 385687,
-    reviewId:reviewIdCounter++,
-    reviewerId: "blockbusterreviews@bigscreen.org",
-    reviewDate: "2024-10-11",
-    content: "Another high-octane entry in the Fast saga that prioritizes spectacle over substance. Die-hard fans will find plenty to enjoy, but newcomers might feel lost in the complex web of characters and plotlines."
-  },
-  {
-    movieId: 670292,
-    reviewId:reviewIdCounter++,
-    reviewerId: "scifibuff@futuristicfilms.net",
-    reviewDate: "2024-11-10",
-    content: "The Creator offers a fresh and visually stunning take on the AI apocalypse genre. The world-building is impressive, and the ethical questions posed are thought-provoking."
-  },
-  {
-    movieId: 670292,
-    reviewId:reviewIdCounter++,
-    reviewerId: "specficfan@altworlds.com",
-    reviewDate: "2024-11-15",
-    content: "An ambitious and visually arresting sci-fi film that sometimes struggles under the weight of its ideas. Nevertheless, it's a compelling and original addition to the genre."
-  },
-  {
-    movieId: 507089,
-    reviewId:reviewIdCounter++,
-    reviewerId: "gametofilm@pixelreels.org",
-    reviewDate: "2024-11-19",
-    content: "Five Nights at Freddy's successfully translates the creepy atmosphere of the games to the big screen. It's a surprisingly effective horror film that should satisfy both fans and newcomers."
-
-  },
-  {
-    movieId: 507089,
-    reviewId:reviewIdCounter++,
-    reviewerId: "horrorfan@midnightscreams.net",
-    reviewDate: "2024-12-17",
-    content: "While it may not be the scariest horror film out there, Five Nights at Freddy's nails the eerie ambiance of the source material. The animatronics are particularly well-done and unsettling."
   },
 ]

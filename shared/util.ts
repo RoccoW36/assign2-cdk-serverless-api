@@ -1,14 +1,7 @@
+import { MovieReviews } from "./types";
 import { marshall } from "@aws-sdk/util-dynamodb";
-import { Movie, MovieCast } from "./types";
 
-type Entity = Movie | MovieCast;  // NEW
-export const generateItem = (entity: Entity) => {
-  return {
-    PutRequest: {
-      Item: marshall(entity),
-    },
-  };
-};
+type Entity = MovieReviews;
 
 export const generateBatch = (data: Entity[]) => {
   return data.map((e) => {
@@ -16,3 +9,10 @@ export const generateBatch = (data: Entity[]) => {
   });
 };
 
+export const generateItem = (entity: Entity) => {
+  return {
+    PutRequest: {
+      Item: marshall(entity),
+    },
+  };
+};
