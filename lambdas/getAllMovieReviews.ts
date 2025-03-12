@@ -1,62 +1,56 @@
-    import { APIGatewayProxyHandlerV2 } from "aws-lambda";  // CHANGED
-    import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-    import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
-    
-    const ddbClient = new DynamoDBClient({ region: process.env.REGION });
-    
-    export const handler: APIGatewayProxyHandlerV2 = async (event, context) => { // CHANGED
-      try {
-    // Print Event
-    console.log("Event: ", event);
+import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
-    const commandOutput = await ddbClient.send(
-      new ScanCommand({
-        TableName: process.env.TABLE_NAME,
-      })
-    );
-    if (!commandOutput.Items) {
+const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
+
+const TABLE_NAME = process.env.TABLE_NAME!;
+const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!; // Ensure this is set in Lambda env variables
+
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  try {
+    console.log("Event: ", JSON.stringify(event));
+
+    const reviewerId = event.queryStringParameters?.reviewerId;
+    let response;
+
+    if (reviewerId) {
+      // Use GSI to filter by reviewerId
+      response = await ddbDocClient.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          IndexName: GSI_REVIEWER_INDEX, // GSI where reviewerId is the partition key
+          KeyConditionExpression: "reviewerId = :reviewerId",
+          ExpressionAttributeValues: { ":reviewerId": reviewerId },
+        })
+      );
+    } else {
+      // Scan full table if no reviewerId is provided
+      response = await ddbDocClient.send(
+        new ScanCommand({ TableName: TABLE_NAME })
+      );
+    }
+
+    if (!response.Items || response.Items.length === 0) {
       return {
         statusCode: 404,
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ Message: "Invalid movie Id" }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "No reviews found" }),
       };
     }
-    const body = {
-      data: commandOutput.Items,
-    };
 
-    // Return Response
     return {
       statusCode: 200,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ data: response.Items }),
     };
   } catch (error: any) {
-    console.log(JSON.stringify(error));
+    console.error("Error fetching movie reviews:", error);
     return {
       statusCode: 500,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ error }),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ error: error.message }),
     };
   }
 };
-
-function createDDbDocClient() {
-  const ddbClient = new DynamoDBClient({ region: process.env.REGION });
-  const marshallOptions = {
-    convertEmptyValues: true,
-    removeUndefinedValues: true,
-    convertClassInstanceToMap: true,
-  };
-  const unmarshallOptions = {
-    wrapNumbers: false,
-  };
-  const translateConfig = { marshallOptions, unmarshallOptions };
-  return DynamoDBDocumentClient.from(ddbClient, translateConfig);
-}
