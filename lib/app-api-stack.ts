@@ -74,7 +74,7 @@ export class AppAPIStack extends cdk.Stack {
 
     const addMovieReviewFn = new lambdanode.NodejsFunction(this, "AddMovieReviewFn", {
       architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_22_X,
+      runtime: lambda.Runtime.NODEJS_18_X,
       entry: `${__dirname}/../lambdas/addMovieReview.ts`,
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
@@ -99,25 +99,25 @@ export class AppAPIStack extends cdk.Stack {
     });
 
     // Movies endpoint
-    const movieReviewsEndpoint = api.root.addResource("movies");
+const movieReviewsEndpoint = api.root.addResource("movies");
 
-    // GET /movies/reviews?reviewerId=<email>
-    const reviewerReviewsResource = movieReviewsEndpoint.addResource("reviews");
-    reviewerReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
+// GET /movies/all-reviews (to fetch all reviews)
+const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
+allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
 
-    // GET /movies/{movieId}/reviews
-    const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
-    specificMovieEndpoint.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
-    const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
-    movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
+// GET /movies/{movieId}/reviews
+const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
+const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
+movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
 
-    // Add Movie Review
-    movieReviewsEndpoint.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
+// Add Movie Review
+movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
+
 
     // Permissions
     movieReviewsTable.grantReadData(getMovieReviewByIdFn);
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);
-    movieReviewsTable.grantReadWriteData(addMovieReviewFn);
+    movieReviewsTable.grant(addMovieReviewFn, "dynamodb:PutItem", "dynamodb:UpdateItem");
 
     // Grant permission to query the GSI
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);

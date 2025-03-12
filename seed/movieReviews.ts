@@ -1,6 +1,6 @@
-import { MovieReviews } from '../shared/types'
+import { MovieReview } from '../shared/types'
 let reviewIdCounter =1;
-export const movieReviews: MovieReviews[] = [
+export const movieReviews: MovieReview[] = [
   {
     movieId: 1234,
     reviewId:reviewIdCounter++,

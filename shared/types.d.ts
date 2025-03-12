@@ -1,4 +1,4 @@
-export type MovieReviews = {
+export type MovieReview = {
   movieId: number;
   reviewId: number,
   reviewerId: string;
