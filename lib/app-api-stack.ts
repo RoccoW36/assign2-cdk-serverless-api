@@ -84,6 +84,19 @@ export class AppAPIStack extends cdk.Stack {
       },
     });
 
+    // Update Movie Review Lambda Function
+    const updateMovieReviewFn = new lambdanode.NodejsFunction(this, "UpdateMovieReviewFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/updateMovieReview.ts`,  // Path to the Lambda function for updating reviews
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: movieReviewsTable.tableName,
+        REGION: "eu-west-1",
+      },
+    });
+
     // REST API
     const api = new apig.RestApi(this, "RestAPI", {
       description: "Movie API",
@@ -99,25 +112,28 @@ export class AppAPIStack extends cdk.Stack {
     });
 
     // Movies endpoint
-const movieReviewsEndpoint = api.root.addResource("movies");
+    const movieReviewsEndpoint = api.root.addResource("movies");
 
-// GET /movies/all-reviews (to fetch all reviews)
-const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
-allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
+    // GET /movies/all-reviews (to fetch all reviews)
+    const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
+    allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
 
-// GET /movies/{movieId}/reviews
-const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
-const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
-movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
+    // GET /movies/{movieId}/reviews
+    const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
+    const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
+    movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
 
-// Add Movie Review
-movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
+    // Add Movie Review
+    movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
 
+    // PUT /movies/{movieId}/reviews (to update a review)
+    movieReviewsByMovieId.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }));
 
     // Permissions
     movieReviewsTable.grantReadData(getMovieReviewByIdFn);
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);
     movieReviewsTable.grant(addMovieReviewFn, "dynamodb:PutItem", "dynamodb:UpdateItem");
+    movieReviewsTable.grant(updateMovieReviewFn, "dynamodb:UpdateItem");
 
     // Grant permission to query the GSI
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);
