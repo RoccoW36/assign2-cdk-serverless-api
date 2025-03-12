@@ -8,7 +8,7 @@ import { generateBatch } from "../shared/util";
 import { movieReviews } from "../seed/movieReviews";
 import * as apig from "aws-cdk-lib/aws-apigateway";
 
-export class RestAPIStack extends cdk.Stack {
+export class AppAPIStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 

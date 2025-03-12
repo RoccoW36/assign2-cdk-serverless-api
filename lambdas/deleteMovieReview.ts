@@ -11,43 +11,48 @@ const ddbDocClient = createDDbDocClient();
 export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     try {
       console.log("[EVENT]", JSON.stringify(event));
+
       const movieId = event.pathParameters?.movieId;
-      if (!movieId) {
+      const reviewId = event.pathParameters?.reviewId;
+
+      if (!movieId || !reviewId) {
+        return {
+          statusCode: 400,
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ message: "Missing movieId or reviewId" }),
+        };
+      }
+
+      // Delete the review from the DynamoDB table
+      const commandOutput = await ddbDocClient.send(
+        new DeleteCommand({
+          TableName: process.env.TABLE_NAME,
+          Key: {
+            movieId: parseInt(movieId, 10),  // Partition key: movieId
+            reviewId: parseInt(reviewId, 10),  // Sort key: reviewId
+          },
+        })
+      );
+
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({ message: "Missing movie ID" }),
+        body: JSON.stringify({ message: "Review deleted successfully" }),
+      };
+    } catch (error: any) {
+      console.log("Error: ", JSON.stringify(error));
+      return {
+        statusCode: 500,
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ error: error.message }),
       };
     }
-      
-    // Delete the movie from the DynamoDB table
-    const commandOutput = await ddbDocClient.send(
-        new DeleteCommand({
-        TableName: process.env.TABLE_NAME,
-        Key:{
-          id:parseInt(movieId, 10)
-        }
-      })
-      );
-    return {
-      statusCode: 200,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ message: "Movie deleted successfully" }),
-    };
-  } catch (error: any) {
-    console.log(JSON.stringify(error));
-    return {
-      statusCode: 500,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ error }),
-    };
-  }
 };
 
 function createDDbDocClient() {
