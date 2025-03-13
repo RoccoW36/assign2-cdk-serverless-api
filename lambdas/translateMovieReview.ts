@@ -7,7 +7,6 @@ import { createResponse } from "../shared/util";
 const ddbClient = new DynamoDBClient({ region: process.env.REGION });
 const translateClient = new TranslateClient({ region: process.env.REGION });
 const TABLE_NAME = process.env.TABLE_NAME!;
-const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!;
 
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
@@ -35,17 +34,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       return createResponse(404, { message: "Review not found" });
     }
 
-    const review = unmarshall(Item);
+    const review = unmarshall(Item) ?? { translations: {} };
 
     // Check if translation already exists
     if (review.translations?.[language]) {
       // Return cached translation with headers
-      const response = createResponse(200, { translation: review.translations[language] }, {
-        "Cache-Control": "public, max-age=3600",  // Cache for 1 hour
-        "ETag": `"${movieId}-${reviewId}-${language}"`,  // Unique ETag for validation
-        "Last-Modified": review.translations[language].lastUpdated,  // Last updated time from the translation
-      });
-      return response;
+      return createResponse(200, { translation: review.translations[language].content });
     }
 
     // Perform translation if not found in cache
@@ -56,11 +50,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     });
     const translationResult = await translateClient.send(translateCommand);
 
-    // Update the review with the translation
+    // Add TTL (24 hours)
+    const ttl = Math.floor(Date.now() / 1000) + 86400; // 24 hours in seconds
+
+    // Update the review with the translation and TTL
     review.translations = review.translations || {};
     review.translations[language] = {
       content: translationResult.TranslatedText,
       lastUpdated: new Date().toISOString(),
+      ttl,  // Set TTL value
     };
 
     const updateItemCommand = new UpdateItemCommand({
@@ -73,12 +71,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     await ddbClient.send(updateItemCommand);
 
     // Return new translation with cache headers
-    const response = createResponse(200, { translation: review.translations[language] }, {
-      "Cache-Control": "public, max-age=3600",  // Cache for 1 hour
-      "ETag": `"${movieId}-${reviewId}-${language}"`,  // Unique ETag for validation
-      "Last-Modified": new Date().toISOString(),  // Last modified time for new translation
-    });
-    return response;
+    return createResponse(200, { translation: review.translations[language].content });
   } catch (error) {
     console.error("Error translating movie review:", error);
     return createResponse(500, { message: "Internal Server Error" });
