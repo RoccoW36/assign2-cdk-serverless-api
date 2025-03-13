@@ -12,13 +12,13 @@ const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!;
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
     // Validate input parameters
-    if (!event.pathParameters?.movieId || !event.queryStringParameters?.reviewId || !event.queryStringParameters?.language) {
+    if (!event.pathParameters?.movieId || !event.pathParameters?.reviewId || !event.pathParameters?.language) {
       return createResponse(400, { message: "Missing required parameters: movieId, reviewId, or language" });
     }
 
     const movieId = Number(event.pathParameters.movieId);
-    const reviewId = Number(event.queryStringParameters.reviewId);
-    const language = event.queryStringParameters.language ?? "";
+    const reviewId = Number(event.pathParameters.reviewId);
+    const language = event.pathParameters.language ?? "";
 
     if (isNaN(movieId) || isNaN(reviewId) || !language) {
       return createResponse(400, { message: "Invalid movieId, reviewId, or language" });
@@ -48,7 +48,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       return response;
     }
 
-    // Perform translation
+    // Perform translation if not found in cache
     const translateCommand = new TranslateTextCommand({
       Text: review.content,
       SourceLanguageCode: "en",

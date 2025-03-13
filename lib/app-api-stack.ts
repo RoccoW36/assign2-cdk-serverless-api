@@ -8,7 +8,12 @@ import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
 import { movieReviews } from "../seed/movieReviews";
 import * as apig from "aws-cdk-lib/aws-apigateway";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as route53 from "aws-cdk-lib/aws-route53";
+import * as certmgr from "aws-cdk-lib/aws-certificatemanager";
+import * as s3 from "aws-cdk-lib/aws-s3";
 
+// Create the AppAPIStack
 export class AppAPIStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -89,13 +94,14 @@ export class AppAPIStack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/translateMovieReview.ts`,
     });
 
-    // Grant permissions
+    // Grant permissions to Lambda functions for accessing DynamoDB
     movieReviewsTable.grantReadData(getMovieReviewByIdFn);
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);
     movieReviewsTable.grantReadWriteData(addMovieReviewFn);
     movieReviewsTable.grantReadWriteData(updateMovieReviewFn);
     movieReviewsTable.grantReadWriteData(translateMovieReviewFn);
 
+    // Allow Lambda function to use Amazon Translate
     translateMovieReviewFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["translate:TranslateText"],
@@ -103,7 +109,7 @@ export class AppAPIStack extends cdk.Stack {
       })
     );
 
-    // REST API
+    // REST API Setup
     const api = new apig.RestApi(this, "RestAPI", {
       description: "Movie API",
       deployOptions: {
@@ -119,20 +125,21 @@ export class AppAPIStack extends cdk.Stack {
 
     // Define API Resources
     const movieReviewsEndpoint = api.root.addResource("movies");
-    const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
     const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
-    const reviewResource = movieReviewsByMovieId.addResource("{reviewId}"); // Adjusted here for {reviewId}
+    const reviewResource = movieReviewsByMovieId.addResource("{reviewId}");
 
-    const translateReviewResource = reviewResource
-      .addResource("translate")
-      .addResource("{language}");
+    // Define the translate review resource under reviewResource with language parameter
+    const translateReviewResource = reviewResource.addResource("translate").addResource("{language}");
 
     // API Gateway Methods
+    const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
-    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true })); // Updated here for PUT
+    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+       
+    
   }
 }
