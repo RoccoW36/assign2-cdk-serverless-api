@@ -122,13 +122,17 @@ export class AppAPIStack extends cdk.Stack {
     const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
     const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
-    const translateReviewEndpoint = movieReviewsByMovieId.addResource("translate");
+    const reviewResource = movieReviewsByMovieId.addResource("{reviewId}"); // Adjusted here for {reviewId}
+
+    const translateReviewResource = reviewResource
+      .addResource("translate")
+      .addResource("{language}");
 
     // API Gateway Methods
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
-    movieReviewsByMovieId.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }));
-    translateReviewEndpoint.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true })); // Updated here for PUT
+    translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
   }
 }

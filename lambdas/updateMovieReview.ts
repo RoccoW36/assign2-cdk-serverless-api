@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddbDocClient = createDDbDocClient();
 
@@ -12,31 +12,55 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     console.log("Event: ", event);
 
-    const { movieId, reviewId, reviewerId, reviewDate, content } = JSON.parse(event.body || '{}');
+    // Extract movieId and reviewId from path parameters
+    const movieId = Number(event.pathParameters?.movieId);
+    const reviewId = Number(event.pathParameters?.reviewId);
 
-    // Validate input parameters
-    if (typeof movieId !== "number" || isNaN(movieId)) {
+    if (isNaN(movieId) || isNaN(reviewId)) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: "Invalid movieId. It must be a valid number." }),
+        body: JSON.stringify({ message: "Invalid movieId or reviewId. They must be valid numbers." }),
       };
     }
 
-    if (typeof reviewId !== "number" || isNaN(reviewId)) {
+    // Parse the body of the request
+    const { reviewerId, reviewDate, content } = JSON.parse(event.body || '{}');
+
+    // Validate request body fields
+    if (!reviewDate && !content) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ message: "Invalid reviewId. It must be a valid number." }),
+        body: JSON.stringify({ message: "At least one field ('reviewDate' or 'content') must be provided to update." }),
       };
     }
 
+    // Fetch the existing review from DynamoDB
+    const review = await ddbDocClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { movieId: movieId, reviewId: reviewId },
+      })
+    );
+
+    if (!review.Item) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ message: "Review not found" }),
+      };
+    }
+
+    // If reviewerId is provided in the body, check if it matches the one stored in the review
+    if (reviewerId && review.Item.reviewerId !== reviewerId) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ message: "You are not authorized to update this review" }),
+      };
+    }
+
+    // Prepare update expression
     const updateExpression = [];
     const expressionAttributeValues: Record<string, any> = {};
-    
-    // Conditionally add attributes to update
-    if (reviewerId) {
-      updateExpression.push("reviewerId = :reviewerId");
-      expressionAttributeValues[":reviewerId"] = reviewerId;
-    }
+
     if (reviewDate) {
       updateExpression.push("reviewDate = :reviewDate");
       expressionAttributeValues[":reviewDate"] = reviewDate;
@@ -46,19 +70,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       expressionAttributeValues[":content"] = content;
     }
 
-    // If no fields are provided to update
-    if (updateExpression.length === 0) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "At least one field must be provided to update" }),
-      };
-    }
-
     // Update the review in DynamoDB
     await ddbDocClient.send(
       new UpdateCommand({
         TableName: TABLE_NAME,
-        Key: { movieId, reviewId },
+        Key: { movieId: movieId, reviewId: reviewId },
         UpdateExpression: `SET ${updateExpression.join(", ")}`,
         ExpressionAttributeValues: expressionAttributeValues,
       })

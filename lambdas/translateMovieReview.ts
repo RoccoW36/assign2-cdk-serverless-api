@@ -1,91 +1,86 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { DynamoDB, Translate } from "aws-sdk";
-import { TranslatedReview } from "../shared/types";
-import Ajv from "ajv";
-import schema from "../shared/types.schema.json";
+import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
+import { APIGatewayProxyHandler } from "aws-lambda";
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import { createResponse } from "../shared/util";
 
-const ajv = new Ajv();
-const isValidTranslationRequest = ajv.compile(schema.definitions["TranslationRequest"] || {});
-const dynamodb = new DynamoDB.DocumentClient();
-const translate = new Translate();
-const TABLE_NAME = process.env.TABLE_NAME || "MovieReviews";
+const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+const translateClient = new TranslateClient({ region: process.env.REGION });
+const TABLE_NAME = process.env.TABLE_NAME!;
+const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!;
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
-  // Extract parameters from the path and query string
-  const movieId = event.pathParameters?.movieId;
-  const queryStringParams = event.queryStringParameters;
-
-  // Ensure queryStringParameters is not undefined and contains necessary fields
-  if (!queryStringParams || !queryStringParams.reviewId || !queryStringParams.language) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        message: "Missing required parameters: reviewId or language"
-      })
-    };
-  }
-
-  const { reviewId, language } = queryStringParams;
-
-  // Validate the parameters
-  if (!movieId || !reviewId || !language) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        message: "Missing required parameters: movieId, reviewId, or language"
-      })
-    };
-  }
-
-  // Proceed with getting the review from DynamoDB
-  const getParams: DynamoDB.DocumentClient.GetItemInput = {
-    TableName: TABLE_NAME,
-    Key: { movieId: Number(movieId), reviewId: Number(reviewId) }
-  };
-
+export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    const result = await dynamodb.get(getParams).promise();
-    if (!result.Item) {
-      return { statusCode: 404, body: "Review not found" };
+    // Validate input parameters
+    if (!event.pathParameters?.movieId || !event.queryStringParameters?.reviewId || !event.queryStringParameters?.language) {
+      return createResponse(400, { message: "Missing required parameters: movieId, reviewId, or language" });
     }
 
-    let review = result.Item as TranslatedReview;
-    review.translations = review.translations || {};
+    const movieId = Number(event.pathParameters.movieId);
+    const reviewId = Number(event.queryStringParameters.reviewId);
+    const language = event.queryStringParameters.language ?? "";
 
-    // If the translation already exists and is up-to-date, return it
-    if (review.translations[language] && review.translations[language].lastUpdated === review.reviewDate) {
-      return { statusCode: 200, body: JSON.stringify(review.translations[language]) };
+    if (isNaN(movieId) || isNaN(reviewId) || !language) {
+      return createResponse(400, { message: "Invalid movieId, reviewId, or language" });
     }
 
-    // Proceed to translate the review content
-    const translateParams = {
+    // Fetch the review from DynamoDB
+    const getItemCommand = new GetItemCommand({
+      TableName: TABLE_NAME,
+      Key: marshall({ movieId, reviewId }),
+    });
+    const { Item } = await ddbClient.send(getItemCommand);
+
+    if (!Item) {
+      return createResponse(404, { message: "Review not found" });
+    }
+
+    const review = unmarshall(Item);
+
+    // Check if translation already exists
+    if (review.translations?.[language]) {
+      // Return cached translation with headers
+      const response = createResponse(200, { translation: review.translations[language] }, {
+        "Cache-Control": "public, max-age=3600",  // Cache for 1 hour
+        "ETag": `"${movieId}-${reviewId}-${language}"`,  // Unique ETag for validation
+        "Last-Modified": review.translations[language].lastUpdated,  // Last updated time from the translation
+      });
+      return response;
+    }
+
+    // Perform translation
+    const translateCommand = new TranslateTextCommand({
       Text: review.content,
       SourceLanguageCode: "en",
-      TargetLanguageCode: language
-    };
+      TargetLanguageCode: language,
+    });
+    const translationResult = await translateClient.send(translateCommand);
 
-    const translationResult = await translate.translateText(translateParams).promise();
+    // Update the review with the translation
+    review.translations = review.translations || {};
     review.translations[language] = {
       content: translationResult.TranslatedText,
-      lastUpdated: review.reviewDate
+      lastUpdated: new Date().toISOString(),
     };
 
-    // Save the updated review with the new translation
-    const putParams: DynamoDB.DocumentClient.PutItemInput = {
+    const updateItemCommand = new UpdateItemCommand({
       TableName: TABLE_NAME,
-      Item: review
-    };
-    await dynamodb.put(putParams).promise();
+      Key: marshall({ movieId, reviewId }),
+      UpdateExpression: "SET translations = :translations",
+      ExpressionAttributeValues: marshall({ ":translations": review.translations }),
+    });
 
-    return {
-      statusCode: 201, // Indicating that a new translation was created
-      body: JSON.stringify(review.translations[language])
-    };
+    await ddbClient.send(updateItemCommand);
+
+    // Return new translation with cache headers
+    const response = createResponse(200, { translation: review.translations[language] }, {
+      "Cache-Control": "public, max-age=3600",  // Cache for 1 hour
+      "ETag": `"${movieId}-${reviewId}-${language}"`,  // Unique ETag for validation
+      "Last-Modified": new Date().toISOString(),  // Last modified time for new translation
+    });
+    return response;
   } catch (error) {
     console.error("Error translating movie review:", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Could not translate review" })
-    };
+    return createResponse(500, { message: "Internal Server Error" });
   }
 };

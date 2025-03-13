@@ -4,6 +4,12 @@ export type MovieReview = {
   reviewerId: string;
   reviewDate: string;
   content: string;
+  translations?: {
+    [language: string]: {
+      content: string;
+      lastUpdated: string;
+    };
+  };
 };
 
 export type MovieReviewQueryParams = {
@@ -29,9 +35,15 @@ export type TranslatedReview = {
       lastUpdated: string;
     };
   };
+  // Optional cache fields
+  cache?: {
+    ETag?: string;
+    LastModified?: string;
+  };
 };
 
 export type ReviewUpdatePayload = {
-  content: string;
+  reviewerId: string;
   reviewDate: string;
+  content: string;
 };

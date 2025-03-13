@@ -6,7 +6,7 @@ const ddbClient = new DynamoDBClient({ region: process.env.REGION });
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 
 const TABLE_NAME = process.env.TABLE_NAME!;
-const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!; // Ensure this is set in Lambda env variables
+const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!;
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
