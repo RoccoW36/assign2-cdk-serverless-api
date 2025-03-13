@@ -8,12 +8,8 @@ import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
 import { movieReviews } from "../seed/movieReviews";
 import * as apig from "aws-cdk-lib/aws-apigateway";
-import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
-import * as route53 from "aws-cdk-lib/aws-route53";
-import * as certmgr from "aws-cdk-lib/aws-certificatemanager";
-import * as s3 from "aws-cdk-lib/aws-s3";
+import * as path from "path";
 
-// Create the AppAPIStack
 export class AppAPIStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -27,7 +23,7 @@ export class AppAPIStack extends cdk.Stack {
       tableName: "MovieReviews",
     });
 
-    // Global Secondary Index (GSI) for querying by reviewerId
+    // Global Secondary Index
     movieReviewsTable.addGlobalSecondaryIndex({
       indexName: "ReviewerIndex",
       partitionKey: { name: "reviewerId", type: dynamodb.AttributeType.STRING },
@@ -35,7 +31,7 @@ export class AppAPIStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
-    // Seed Movie Reviews Data
+    // Seed Data
     new custom.AwsCustomResource(this, "reviewsddbInitData", {
       onCreate: {
         service: "DynamoDB",
@@ -52,56 +48,38 @@ export class AppAPIStack extends cdk.Stack {
       }),
     });
 
-    // Lambda function configurations
-    const lambdaConfig = {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: movieReviewsTable.tableName,
-        REGION: "eu-west-1",
-      },
-    };
+    // Helper function to create Lambda functions
+    const createLambda = (id: string, entry: string, additionalEnv?: Record<string, string>) =>
+      new lambdanode.NodejsFunction(this, id, {
+        architecture: lambda.Architecture.ARM_64,
+        runtime: lambda.Runtime.NODEJS_18_X,
+        timeout: cdk.Duration.seconds(10),
+        memorySize: 128,
+        environment: {
+          TABLE_NAME: movieReviewsTable.tableName,
+          REGION: "eu-west-1",
+          ...additionalEnv,
+        },
+        entry,
+      });
 
     // Define Lambda functions
-    const getMovieReviewByIdFn = new lambdanode.NodejsFunction(this, "getMovieReviewByIdFn", {
-      ...lambdaConfig,
-      entry: `${__dirname}/../lambdas/getMovieReviewById.ts`,
+    const getMovieReviewByIdFn = createLambda("getMovieReviewByIdFn", path.join(__dirname, "../lambdas/getMovieReviewById.ts"));
+    const getAllMovieReviewsFn = createLambda("getAllMovieReviewsFn", path.join(__dirname, "../lambdas/getAllMovieReviews.ts"), {
+      GSI_REVIEWER_INDEX: "ReviewerIndex",
     });
+    const addMovieReviewFn = createLambda("AddMovieReviewFn", path.join(__dirname, "../lambdas/addMovieReview.ts"));
+    const updateMovieReviewFn = createLambda("UpdateMovieReviewFn", path.join(__dirname, "../lambdas/updateMovieReview.ts"));
+    const translateMovieReviewFn = createLambda("TranslateMovieReviewFn", path.join(__dirname, "../lambdas/translateMovieReview.ts"));
+    
 
-    const getAllMovieReviewsFn = new lambdanode.NodejsFunction(this, "getAllMovieReviewsFn", {
-      ...lambdaConfig,
-      entry: `${__dirname}/../lambdas/getAllMovieReviews.ts`,
-      environment: {
-        ...lambdaConfig.environment,
-        GSI_REVIEWER_INDEX: "ReviewerIndex",
-      },
-    });
-
-    const addMovieReviewFn = new lambdanode.NodejsFunction(this, "AddMovieReviewFn", {
-      ...lambdaConfig,
-      entry: `${__dirname}/../lambdas/addMovieReview.ts`,
-    });
-
-    const updateMovieReviewFn = new lambdanode.NodejsFunction(this, "UpdateMovieReviewFn", {
-      ...lambdaConfig,
-      entry: `${__dirname}/../lambdas/updateMovieReview.ts`,
-    });
-
-    const translateMovieReviewFn = new lambdanode.NodejsFunction(this, "TranslateMovieReviewFn", {
-      ...lambdaConfig,
-      entry: `${__dirname}/../lambdas/translateMovieReview.ts`,
-    });
-
-    // Grant permissions to Lambda functions for accessing DynamoDB
+    // Grant permissions
     movieReviewsTable.grantReadData(getMovieReviewByIdFn);
     movieReviewsTable.grantReadData(getAllMovieReviewsFn);
     movieReviewsTable.grantReadWriteData(addMovieReviewFn);
     movieReviewsTable.grantReadWriteData(updateMovieReviewFn);
     movieReviewsTable.grantReadWriteData(translateMovieReviewFn);
 
-    // Allow Lambda function to use Amazon Translate
     translateMovieReviewFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["translate:TranslateText"],
@@ -128,8 +106,6 @@ export class AppAPIStack extends cdk.Stack {
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
     const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
     const reviewResource = movieReviewsByMovieId.addResource("{reviewId}");
-
-    // Define the translate review resource under reviewResource with language parameter
     const translateReviewResource = reviewResource.addResource("translate").addResource("{language}");
 
     // API Gateway Methods
@@ -139,7 +115,5 @@ export class AppAPIStack extends cdk.Stack {
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
     reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
-       
-    
   }
 }
