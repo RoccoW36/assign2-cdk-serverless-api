@@ -1,6 +1,15 @@
-// shared/util.ts
 import { MovieReview } from "./types";
 import { marshall } from "@aws-sdk/util-dynamodb";
+import {
+  APIGatewayRequestAuthorizerEvent,
+  APIGatewayAuthorizerEvent,
+  PolicyDocument,
+  APIGatewayProxyEvent,
+  StatementEffect,
+} from "aws-lambda";
+import axios from "axios";
+import jwt, { JwtPayload } from "jsonwebtoken";
+import jwkToPem from "jwk-to-pem";
 
 type Entity = MovieReview;
 
@@ -16,12 +25,6 @@ export const generateItem = (entity: Entity) => {
   };
 };
 
-/**
- * Standardized response for API Gateway
- * @param statusCode HTTP status code
- * @param body Response body
- * @param headers Optional HTTP headers
- */
 export const createResponse = (
   statusCode: number,
   body: object,
@@ -34,5 +37,77 @@ export const createResponse = (
       "Content-Type": "application/json",
       ...headers,
     },
+  };
+};
+
+export type CookieMap = { [key: string]: string } | undefined;
+export type JwtToken = { sub: string; email: string } | null;
+export type Jwk = {
+  keys: {
+    alg: string;
+    e: string;
+    kid: string;
+    kty: "RSA";
+    n: string;
+    use: string;
+  }[];
+};
+
+export const parseCookies = (
+  event: APIGatewayRequestAuthorizerEvent | APIGatewayProxyEvent
+): CookieMap => {
+  if (!event.headers || !event.headers.Cookie) {
+    return undefined;
+  }
+  const cookiesStr = event.headers.Cookie;
+  const cookiesArr = cookiesStr.split(";");
+  const cookieMap: CookieMap = {};
+  for (let cookie of cookiesArr) {
+    const cookieSplit = cookie.trim().split("=");
+    cookieMap[cookieSplit[0]] = cookieSplit[1];
+  }
+  return cookieMap;
+};
+
+export const verifyToken = async (
+  token: string,
+  userPoolId: string | undefined,
+  region: string
+): Promise<JwtToken> => {
+  try {
+    if (!userPoolId) {
+      throw new Error("User pool ID is undefined.");
+    }
+    const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+    const { data }: { data: Jwk } = await axios.get(url);
+    const rsaKey = data.keys.find((key) => key.kty === "RSA");
+    if (!rsaKey) {
+      throw new Error("No RSA key found in the JWK.");
+    }
+    const pem = jwkToPem(rsaKey);
+    const decoded = jwt.verify(token, pem, { algorithms: ["RS256"] });
+    if (typeof decoded === "object" && decoded !== null && "sub" in decoded && "email" in decoded) {
+      return decoded as JwtToken;
+    }
+    return null;
+  } catch (err) {
+    console.error("Token verification failed:", err);
+    return null;
+  }
+};
+
+export const createPolicy = (
+  event: APIGatewayAuthorizerEvent,
+  effect: StatementEffect
+): PolicyDocument => {
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: effect,
+        Action: "execute-api:Invoke",
+        Resource: [event.methodArn],
+      },
+    ],
   };
 };
