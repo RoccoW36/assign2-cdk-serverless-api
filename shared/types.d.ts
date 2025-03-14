@@ -47,3 +47,31 @@ export type ReviewUpdatePayload = {
   reviewDate: string;
   content: string;
 };
+
+// --- Authentication Types ---
+export type AuthApiProps = {
+  userPoolId: string;
+  userPoolClientId: string;
+};
+
+export type SignUpBody = {
+  username: string;
+  password: string;
+  email: string;
+};
+
+export type ConfirmSignUpBody = {
+  username: string;
+  code: string;
+};
+
+export type SignInBody = {
+  username: string;
+  password: string;
+};
+
+export type AuthResponse = {
+  message: string;
+  token?: string; // JWT token (only for successful sign-in)
+  refreshToken?: string; // Refresh token if needed
+};

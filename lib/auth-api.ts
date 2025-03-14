@@ -1,74 +1,61 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
-import * as apig from "aws-cdk-lib/aws-apigateway";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as node from "aws-cdk-lib/aws-lambda-nodejs";
-
-type AuthApiProps = {
-  userPoolId: string;
-  userPoolClientId: string;
-};
+import * as path from "path";
+import { AuthApiProps } from "../shared/types";
 
 export class AuthApi extends Construct {
-  private auth: apig.IResource;
-  private userPoolId: string;
-  private userPoolClientId: string;
+  private readonly userPoolId: string;
+  private readonly userPoolClientId: string;
+  private readonly auth: apigateway.IResource;
 
   constructor(scope: Construct, id: string, props: AuthApiProps) {
     super(scope, id);
 
-    ({ userPoolId: this.userPoolId, userPoolClientId: this.userPoolClientId } =
-      props);
+    this.userPoolId = props.userPoolId;
+    this.userPoolClientId = props.userPoolClientId;
 
-    const api = new apig.RestApi(this, "AuthServiceApi", {
-      description: "Authentication Service RestApi",
-      endpointTypes: [apig.EndpointType.REGIONAL],
+    // Create a new API Gateway instance for Auth API
+    const api = new apigateway.RestApi(this, "AuthServiceApi", {
+      restApiName: "Auth API",
+      deployOptions: { stageName: "dev" },
       defaultCorsPreflightOptions: {
-        allowOrigins: apig.Cors.ALL_ORIGINS,
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ["OPTIONS", "POST"],
+        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
       },
     });
 
+    // Initialize the `auth` resource under the root of the API
     this.auth = api.root.addResource("auth");
 
-    this.addAuthRoute("signup", "POST", "SignupFn", "signup.ts");
+    // Define the routes for authentication (signup, signin, etc.)
+    this.addAuthRoute(api, "signup", "signup");
+    this.addAuthRoute(api, "signin", "signin");
+    this.addAuthRoute(api, "confirm_signup", "confirm-signup");
+    this.addAuthRoute(api, "signout", "signout");
 
-    this.addAuthRoute(
-      "confirm_signup",
-      "POST",
-      "ConfirmFn",
-      "confirm-signup.ts"
-    );
-
-    this.addAuthRoute("signout", "GET", "SignoutFn", "signout.ts");
-    this.addAuthRoute("signin", "POST", "SigninFn", "signin.ts");
   }
 
-  private addAuthRoute(
-    resourceName: string,
-    method: string,
-    fnName: string,
-    fnEntry: string
-  ): void {
-    const commonFnProps = {
-      architecture: lambda.Architecture.ARM_64,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      runtime: lambda.Runtime.NODEJS_22_X,
+  private addAuthRoute(api: apigateway.RestApi, resourceName: string, functionName: string): void {
+    const lambdaFn = new node.NodejsFunction(this, `${functionName}Fn`, {
+      entry: path.join(__dirname, `../lambdas/auth/${functionName}.ts`),
       handler: "handler",
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(10),
+      architecture: lambda.Architecture.ARM_64,
       environment: {
         USER_POOL_ID: this.userPoolId,
         CLIENT_ID: this.userPoolClientId,
         REGION: cdk.Aws.REGION,
       },
-    };
-
-    const resource = this.auth.addResource(resourceName);
-
-    const fn = new node.NodejsFunction(this, fnName, {
-      ...commonFnProps,
-      entry: `${__dirname}/../lambda/auth/${fnEntry}`,
     });
 
-    resource.addMethod(method, new apig.LambdaIntegration(fn));
+    // Add the resource with the correct path
+    const resource = this.auth.addResource(resourceName);
+    resource.addMethod("POST", new apigateway.LambdaIntegration(lambdaFn));
   }
 }

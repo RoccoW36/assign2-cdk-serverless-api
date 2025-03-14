@@ -10,9 +10,9 @@ import { movieReviews } from "../seed/movieReviews";
 import * as apig from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 
-export class AppAPIStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
+export class AppAPI extends Construct { 
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
 
     // Movie Reviews Table
     const movieReviewsTable = new dynamodb.Table(this, "MovieReviewsTable", {
@@ -88,7 +88,7 @@ export class AppAPIStack extends cdk.Stack {
     );
 
     // REST API Setup
-    const api = new apig.RestApi(this, "RestAPI", {
+    const api = new apig.RestApi(this, "MovieReviewsAPI", {
       description: "Movie API",
       deployOptions: {
         stageName: "dev",
