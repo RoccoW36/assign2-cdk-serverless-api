@@ -24,13 +24,14 @@ export class AuthAppStack extends cdk.Stack {
 
     const userPoolClientId = appClient.userPoolClientId;
 
-    // Create the Auth API for authentication (this will handle sign-in, sign-up, etc.)
     new AuthApi(this, 'AuthServiceApi', {
       userPoolId: userPoolId,
       userPoolClientId: userPoolClientId,
     });
 
-    // Create the App API (no authentication applied yet)
-    new AppAPI(this, 'AppApi');
-  }
+    new AppAPI(this, 'AppApi', {
+      userPoolId: userPoolId,
+      userPoolClientId: userPoolClientId,
+    } );
+}
 }

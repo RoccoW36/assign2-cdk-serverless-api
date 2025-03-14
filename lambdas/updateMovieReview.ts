@@ -1,5 +1,5 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { CookieMap, parseCookies, verifyToken } from "../shared/util"; // Importing from utils
+import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
 import { ddbDocClient } from "../shared/util";
 import { UpdateItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
 
@@ -25,7 +25,7 @@ export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
     }
 
     // 2. Verify the JWT token using the authorizer function
-    const verifiedJwt = await verifyToken(
+    const verifiedJwt: JwtToken = await verifyToken(
       cookies.token,
       process.env.USER_POOL_ID,
       process.env.REGION!

@@ -1,5 +1,5 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { CookieMap, parseCookies, verifyToken } from "../shared/util"; // Importing from utils
+import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
@@ -9,11 +9,13 @@ const ajv = new Ajv();
 const isValidBodyParams = ajv.compile(schema.definitions["MovieReview"] || {});
 const ddbDocClient = createDDbDocClient();
 
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
+export const handler: APIGatewayProxyHandlerV2 = async function (event: any) {
+    console.log("[EVENT]", JSON.stringify(event));
+
     try {
         // Parse cookies to get the JWT token
         const cookies: CookieMap = parseCookies(event);
-        if (!cookies || !cookies.token) {
+        if (!cookies) {
             return {
                 statusCode: 401,
                 headers: {
@@ -26,7 +28,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
         }
 
         // Verify the JWT token using the authorizer function
-        const verifiedJwt = await verifyToken(
+        const verifiedJwt: JwtToken = await verifyToken(
             cookies.token,
             process.env.USER_POOL_ID,
             process.env.REGION!
@@ -116,6 +118,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     }
 };
 
+// Define createDDbDocClient function outside the handler
 function createDDbDocClient() {
     const ddbClient = new DynamoDBClient({ region: process.env.REGION });
     const marshallOptions = {

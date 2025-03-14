@@ -92,3 +92,8 @@ export type APIGatewayEventWithAuth = {
   };
 };
 
+export type AppApiProps = {
+  userPoolId: string;
+  userPoolClientId: string;
+};
+
