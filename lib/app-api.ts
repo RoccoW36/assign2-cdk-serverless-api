@@ -57,7 +57,6 @@ export class AppAPI extends Construct {
       memorySize: 128,
       environment: {
         USER_POOL_ID: "your-cognito-user-pool-id",
-        //AWS_REGION: "eu-west-1",
       },
     });
 
@@ -110,7 +109,7 @@ export class AppAPI extends Construct {
         stageName: "dev",
       },
       defaultCorsPreflightOptions: {
-        allowHeaders: ["Content-Type", "X-Amz-Date","Cookie"],
+        allowHeaders: ["Content-Type", "X-Amz-Date", "Cookie"],
         allowMethods: ["OPTIONS", "GET", "POST", "PUT"],
         allowCredentials: true,
         allowOrigins: ["*"],
@@ -129,21 +128,23 @@ export class AppAPI extends Construct {
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
-    
+
+    // POST Method 
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
-      authorizer: authorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,
+       authorizer: authorizer, 
+       authorizationType: apig.AuthorizationType.CUSTOM, 
       requestParameters: {
         "method.request.header.Cookie": true,
       },
     });
+
+    // PUT Method 
     reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
-      authorizer: authorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,
+       authorizer: authorizer, 
+       authorizationType: apig.AuthorizationType.CUSTOM, 
       requestParameters: {
         "method.request.header.Cookie": true,
       },
     });
-    
   }
 }

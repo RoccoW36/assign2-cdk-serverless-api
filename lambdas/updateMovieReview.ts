@@ -1,4 +1,5 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
+import { CookieMap, parseCookies, verifyToken } from "../shared/util"; // Importing from utils
 import { ddbDocClient } from "../shared/util";
 import { UpdateItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
 
@@ -16,13 +17,26 @@ function createResponse(statusCode: number, body: object) {
 
 export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
   try {
-    // 1. Get user details from the authorizer (JWT claims passed by the authorizer)
-    const user = event.requestContext.authorizer?.claims;
-    if (!user || !user.email) {
-      return createResponse(401, { message: "Unauthorized: No valid user information" });
+    // 1. Parse cookies to get the JWT token
+    const cookies: CookieMap = parseCookies(event);
+    if (!cookies || !cookies.token) {
+      console.log("No token found in cookies");
+      return createResponse(401, { message: "Unauthorized: No token provided" });
     }
 
-    // 2. Fetch the review to check if the reviewer is the same
+    // 2. Verify the JWT token using the authorizer function
+    const verifiedJwt = await verifyToken(
+      cookies.token,
+      process.env.USER_POOL_ID,
+      process.env.REGION!
+    );
+
+    if (!verifiedJwt) {
+      console.log("Token verification failed");
+      return createResponse(401, { message: "Unauthorized: Invalid token" });
+    }
+
+    // 3. Fetch the review to check if the reviewer is the same
     const reviewId = event.pathParameters?.reviewId;
     const movieId = event.pathParameters?.movieId;
 
@@ -32,11 +46,11 @@ export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
 
     // Fetch review from DynamoDB
     const review = await getMovieReview(movieId, reviewId);
-    if (review.ReviewerId.S !== user.email) {
+    if (review.ReviewerId.S !== verifiedJwt.sub) {
       return createResponse(403, { message: "Forbidden: You cannot update this review" });
     }
 
-    // 3. Update the review
+    // 4. Update the review content
     const body = event.body ? JSON.parse(event.body) : undefined;
     if (!body || !body.content) {
       return createResponse(400, { message: "Bad Request: Missing content field" });
@@ -55,7 +69,7 @@ export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
       ReturnValues: "UPDATED_NEW" as const,
     };
 
-    // Step 4: Execute the update
+    // Step 5: Execute the update
     const result = await ddbDocClient.send(new UpdateItemCommand(updateParams));
     if (!result.Attributes) {
       return createResponse(500, { message: "Failed to fetch updated attributes" });

@@ -1,9 +1,9 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { CookieMap, parseCookies, verifyToken } from "../shared/util"; // Importing from utils
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
 import schema from "../shared/types.schema.json";
-import { CookieMap, parseCookies, verifyToken } from "../shared/util";
 
 const ajv = new Ajv();
 const isValidBodyParams = ajv.compile(schema.definitions["MovieReview"] || {});
@@ -13,11 +13,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     try {
         // Parse cookies to get the JWT token
         const cookies: CookieMap = parseCookies(event);
-
-        // If no token is found in cookies, return Unauthorized response
         if (!cookies || !cookies.token) {
             return {
-                statusCode: 401, // Unauthorized
+                statusCode: 401,
                 headers: {
                     "content-type": "application/json",
                     "Access-Control-Allow-Headers": "*",
@@ -26,9 +24,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
                 body: JSON.stringify({ message: "Unauthorized: No token provided" }),
             };
         }
-        console.log("Received Headers:", event.headers);
-        console.log("Extracted Cookie:", event.headers?.Cookie || event.headers?.cookie);
-        
+
         // Verify the JWT token using the authorizer function
         const verifiedJwt = await verifyToken(
             cookies.token,
@@ -36,7 +32,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
             process.env.REGION!
         );
 
-        // If token is invalid or cannot be verified, return Unauthorized response
         if (!verifiedJwt) {
             return {
                 statusCode: 401, // Unauthorized
@@ -121,7 +116,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     }
 };
 
-// Function to create the DynamoDB Document Client
 function createDDbDocClient() {
     const ddbClient = new DynamoDBClient({ region: process.env.REGION });
     const marshallOptions = {
