@@ -10,7 +10,7 @@ import { movieReviews } from "../seed/movieReviews";
 import * as apig from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 
-export class AppAPI extends Construct { 
+export class AppAPI extends Construct {
   constructor(scope: Construct, id: string) {
     super(scope, id);
 
@@ -48,6 +48,23 @@ export class AppAPI extends Construct {
       }),
     });
 
+    // Create Lambda Authorizer
+    const authorizerFn = new lambdanode.NodejsFunction(this, "AuthorizerFn", {
+      entry: path.join(__dirname, "../lambdas/auth/authorizer.ts"),
+      handler: "handler",
+      runtime: lambda.Runtime.NODEJS_18_X,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        USER_POOL_ID: "your-cognito-user-pool-id",
+        //AWS_REGION: "eu-west-1",
+      },
+    });
+
+    const authorizer = new apig.TokenAuthorizer(this, "JWTAuthorizer", {
+      handler: authorizerFn,
+    });
+
     // Helper function to create Lambda functions
     const createLambda = (id: string, entry: string, additionalEnv?: Record<string, string>) =>
       new lambdanode.NodejsFunction(this, id, {
@@ -71,7 +88,6 @@ export class AppAPI extends Construct {
     const addMovieReviewFn = createLambda("AddMovieReviewFn", path.join(__dirname, "../lambdas/addMovieReview.ts"));
     const updateMovieReviewFn = createLambda("UpdateMovieReviewFn", path.join(__dirname, "../lambdas/updateMovieReview.ts"));
     const translateMovieReviewFn = createLambda("TranslateMovieReviewFn", path.join(__dirname, "../lambdas/translateMovieReview.ts"));
-    
 
     // Grant permissions
     movieReviewsTable.grantReadData(getMovieReviewByIdFn);
@@ -112,8 +128,15 @@ export class AppAPI extends Construct {
     const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
-    movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }));
-    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+    movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
+      authorizer: authorizer,
+      authorizationType: apig.AuthorizationType.CUSTOM,
+    });
+    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
+      authorizer: authorizer,
+      authorizationType: apig.AuthorizationType.CUSTOM,
+    });
+    
   }
 }

@@ -1,102 +1,91 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { APIGatewayProxyEvent } from 'aws-lambda';
+import { ddbDocClient } from "../shared/util";
+import { UpdateItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
 
-const ddbDocClient = createDDbDocClient();
+// Helper function to create standardized responses
+function createResponse(statusCode: number, body: object) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify(body),
+  };
+}
 
-// Environment variables
-const TABLE_NAME = process.env.TABLE_NAME!;
-const REGION = process.env.REGION!;
-
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
   try {
-    console.log("Event: ", event);
-
-    // Extract movieId and reviewId from path parameters
-    const movieId = Number(event.pathParameters?.movieId);
-    const reviewId = Number(event.pathParameters?.reviewId);
-
-    if (isNaN(movieId) || isNaN(reviewId)) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Invalid movieId or reviewId. They must be valid numbers." }),
-      };
+    // 1. Get user details from the authorizer (JWT claims passed by the authorizer)
+    const user = event.requestContext.authorizer?.claims;
+    if (!user || !user.email) {
+      return createResponse(401, { message: "Unauthorized: No valid user information" });
     }
 
-    // Parse the body of the request
-    const { reviewerId, reviewDate, content } = JSON.parse(event.body || '{}');
+    // 2. Fetch the review to check if the reviewer is the same
+    const reviewId = event.pathParameters?.reviewId;
+    const movieId = event.pathParameters?.movieId;
 
-    // Validate request body fields
-    if (!reviewDate && !content) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "At least one field ('reviewDate' or 'content') must be provided to update." }),
-      };
+    if (!reviewId || !movieId) {
+      return createResponse(400, { message: "Bad Request: Missing review or movie ID" });
     }
 
-    // Fetch the existing review from DynamoDB
-    const review = await ddbDocClient.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { movieId: movieId, reviewId: reviewId },
-      })
-    );
-
-    if (!review.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ message: "Review not found" }),
-      };
+    // Fetch review from DynamoDB
+    const review = await getMovieReview(movieId, reviewId);
+    if (review.ReviewerId.S !== user.email) {
+      return createResponse(403, { message: "Forbidden: You cannot update this review" });
     }
 
-    // If reviewerId is provided in the body, check if it matches the one stored in the review
-    if (reviewerId && review.Item.reviewerId !== reviewerId) {
-      return {
-        statusCode: 403,
-        body: JSON.stringify({ message: "You are not authorized to update this review" }),
-      };
+    // 3. Update the review
+    const body = event.body ? JSON.parse(event.body) : undefined;
+    if (!body || !body.content) {
+      return createResponse(400, { message: "Bad Request: Missing content field" });
     }
 
-    // Prepare update expression
-    const updateExpression = [];
-    const expressionAttributeValues: Record<string, any> = {};
-
-    if (reviewDate) {
-      updateExpression.push("reviewDate = :reviewDate");
-      expressionAttributeValues[":reviewDate"] = reviewDate;
-    }
-    if (content) {
-      updateExpression.push("content = :content");
-      expressionAttributeValues[":content"] = content;
-    }
-
-    // Update the review in DynamoDB
-    await ddbDocClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: { movieId: movieId, reviewId: reviewId },
-        UpdateExpression: `SET ${updateExpression.join(", ")}`,
-        ExpressionAttributeValues: expressionAttributeValues,
-      })
-    );
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Review updated successfully" }),
+    const updateParams = {
+      TableName: "MovieReviews",
+      Key: {
+        MovieId: { S: movieId },
+        ReviewId: { S: reviewId },
+      },
+      UpdateExpression: "set Content = :content",
+      ExpressionAttributeValues: {
+        ":content": { S: body.content },
+      },
+      ReturnValues: "UPDATED_NEW" as const,
     };
-  } catch (error: any) {
-    console.error("Error updating review: ", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ message: "Error updating review", error: error.message }),
-    };
+
+    // Step 4: Execute the update
+    const result = await ddbDocClient.send(new UpdateItemCommand(updateParams));
+    if (!result.Attributes) {
+      return createResponse(500, { message: "Failed to fetch updated attributes" });
+    }
+
+    return createResponse(200, { message: "Review updated successfully", updatedAttributes: result.Attributes });
+  } catch (err) {
+    console.error("Error updating review:", err);
+    return createResponse(500, { message: "Internal Server Error" });
   }
 };
 
-function createDDbDocClient() {
-  const ddbClient = new DynamoDBClient({ region: REGION });
-  return DynamoDBDocumentClient.from(ddbClient, {
-    marshallOptions: { convertEmptyValues: true, removeUndefinedValues: true },
-    unmarshallOptions: { wrapNumbers: false },
-  });
+// Helper function to fetch a movie review from DynamoDB
+async function getMovieReview(movieId: string, reviewId: string) {
+  const params = {
+    TableName: "MovieReviews",
+    Key: {
+      MovieId: { S: movieId },
+      ReviewId: { S: reviewId },
+    },
+  };
+
+  try {
+    const result = await ddbDocClient.send(new GetItemCommand(params));
+    if (!result.Item) {
+      throw new Error("Review not found");
+    }
+    return result.Item;
+  } catch (err) {
+    console.error("Error fetching review:", err);
+    throw err;
+  }
 }

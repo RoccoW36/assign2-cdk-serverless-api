@@ -6,12 +6,17 @@ import {
   PolicyDocument,
   APIGatewayProxyEvent,
   StatementEffect,
+  APIGatewayProxyEventV2,
 } from "aws-lambda";
 import axios from "axios";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import jwkToPem from "jwk-to-pem";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 type Entity = MovieReview;
+
+export const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'eu-west-1' }));
 
 export const generateBatch = (data: Entity[]) => {
   return data.map((e) => generateItem(e));
@@ -50,25 +55,30 @@ export type Jwk = {
     kty: "RSA";
     n: string;
     use: string;
-  }[];
+  }[]; 
 };
 
-export const parseCookies = (
-  event: APIGatewayRequestAuthorizerEvent | APIGatewayProxyEvent
+// Parse cookies from the event headers
+export const parseCookies = (event: APIGatewayProxyEventV2
 ): CookieMap => {
   if (!event.headers || !event.headers.Cookie) {
     return undefined;
   }
+
   const cookiesStr = event.headers.Cookie;
   const cookiesArr = cookiesStr.split(";");
+
   const cookieMap: CookieMap = {};
+
   for (let cookie of cookiesArr) {
     const cookieSplit = cookie.trim().split("=");
     cookieMap[cookieSplit[0]] = cookieSplit[1];
   }
+
   return cookieMap;
 };
 
+// Verify the JWT token using a public key from Cognito
 export const verifyToken = async (
   token: string,
   userPoolId: string | undefined,

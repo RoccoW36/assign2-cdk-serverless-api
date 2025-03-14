@@ -44,8 +44,8 @@ export type TranslatedReview = {
 
 export type ReviewUpdatePayload = {
   reviewerId: string;
-  reviewDate: string;
-  content: string;
+  reviewDate?: string;
+  content?: string;
 };
 
 // --- Authentication Types ---
@@ -75,3 +75,20 @@ export type AuthResponse = {
   token?: string; // JWT token (only for successful sign-in)
   refreshToken?: string; // Refresh token if needed
 };
+
+export type JwtAuthorizerClaims = {
+  email: string;
+  sub: string;
+  [key: string]: any;
+};
+
+export type APIGatewayEventWithAuth = {
+  requestContext: {
+    authorizer?: {
+      jwt?: {
+        claims?: JwtAuthorizerClaims;
+      };
+    };
+  };
+};
+
