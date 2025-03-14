@@ -110,7 +110,7 @@ export class AppAPI extends Construct {
         stageName: "dev",
       },
       defaultCorsPreflightOptions: {
-        allowHeaders: ["Content-Type", "X-Amz-Date"],
+        allowHeaders: ["Content-Type", "X-Amz-Date","Cookie"],
         allowMethods: ["OPTIONS", "GET", "POST", "PUT"],
         allowCredentials: true,
         allowOrigins: ["*"],
@@ -129,13 +129,20 @@ export class AppAPI extends Construct {
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+    
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
       authorizer: authorizer,
       authorizationType: apig.AuthorizationType.CUSTOM,
+      requestParameters: {
+        "method.request.header.Cookie": true,
+      },
     });
     reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
       authorizer: authorizer,
       authorizationType: apig.AuthorizationType.CUSTOM,
+      requestParameters: {
+        "method.request.header.Cookie": true,
+      },
     });
     
   }

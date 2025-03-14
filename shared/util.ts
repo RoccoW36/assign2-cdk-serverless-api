@@ -59,17 +59,20 @@ export type Jwk = {
 };
 
 // Parse cookies from the event headers
-export const parseCookies = (event: APIGatewayProxyEventV2
+export const parseCookies = (
+  event: APIGatewayRequestAuthorizerEvent | APIGatewayProxyEvent
 ): CookieMap => {
+  // Ensure the event has headers and the 'Cookie' field
   if (!event.headers || !event.headers.Cookie) {
     return undefined;
   }
 
-  const cookiesStr = event.headers.Cookie;
-  const cookiesArr = cookiesStr.split(";");
+  const cookiesStr = event.headers.Cookie; // Access cookies from the headers
+  const cookiesArr = cookiesStr.split(";"); // Split cookies by ';'
 
   const cookieMap: CookieMap = {};
 
+  // Loop through each cookie and split it into key-value pairs
   for (let cookie of cookiesArr) {
     const cookieSplit = cookie.trim().split("=");
     cookieMap[cookieSplit[0]] = cookieSplit[1];
@@ -77,6 +80,7 @@ export const parseCookies = (event: APIGatewayProxyEventV2
 
   return cookieMap;
 };
+
 
 // Verify the JWT token using a public key from Cognito
 export const verifyToken = async (
@@ -88,23 +92,37 @@ export const verifyToken = async (
     if (!userPoolId) {
       throw new Error("User pool ID is undefined.");
     }
+
+    // Construct the URL for the JWKS endpoint in Cognito
     const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+    
+    // Fetch the JWK (JSON Web Key) set from Cognito
     const { data }: { data: Jwk } = await axios.get(url);
+
+    // Find the RSA key in the JWK set
     const rsaKey = data.keys.find((key) => key.kty === "RSA");
     if (!rsaKey) {
       throw new Error("No RSA key found in the JWK.");
     }
+
+    // Convert the JWK to PEM format
     const pem = jwkToPem(rsaKey);
+
+    // Decode and verify the JWT token using the public key (PEM format)
     const decoded = jwt.verify(token, pem, { algorithms: ["RS256"] });
+
+    // Ensure the decoded token contains 'sub' and 'email'
     if (typeof decoded === "object" && decoded !== null && "sub" in decoded && "email" in decoded) {
       return decoded as JwtToken;
     }
-    return null;
+
+    return null; // Return null if token is not valid
   } catch (err) {
     console.error("Token verification failed:", err);
     return null;
   }
 };
+
 
 export const createPolicy = (
   event: APIGatewayAuthorizerEvent,

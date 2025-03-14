@@ -26,7 +26,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
                 body: JSON.stringify({ message: "Unauthorized: No token provided" }),
             };
         }
-
+        console.log("Received Headers:", event.headers);
+        console.log("Extracted Cookie:", event.headers?.Cookie || event.headers?.cookie);
+        
         // Verify the JWT token using the authorizer function
         const verifiedJwt = await verifyToken(
             cookies.token,
