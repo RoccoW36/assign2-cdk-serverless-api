@@ -35,17 +35,13 @@ export type TranslatedReview = {
       lastUpdated: string;
     };
   };
-  // Optional cache fields
-  cache?: {
-    ETag?: string;
-    LastModified?: string;
-  };
 };
 
 export type ReviewUpdatePayload = {
-  reviewerId: string;
+  movieId: number;
+  reviewId: number;
   reviewDate?: string;
-  content?: string;
+  content: string;
 };
 
 export type AuthApiProps = {

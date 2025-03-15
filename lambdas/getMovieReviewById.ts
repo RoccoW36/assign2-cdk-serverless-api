@@ -27,7 +27,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     let response;
 
     if (reviewerId) {
-      // Less efficient but necessary: Scan GSI and filter for movieId
       response = await ddbDocClient.send(
         new ScanCommand({
           TableName: TABLE_NAME,
@@ -39,7 +38,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         })
       );
     } else {
-      // Query all reviews for the movie (more efficient)
       response = await ddbDocClient.send(
         new QueryCommand({
           TableName: TABLE_NAME,

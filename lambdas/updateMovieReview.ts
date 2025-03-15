@@ -1,105 +1,132 @@
-import { APIGatewayProxyEvent } from 'aws-lambda';
-import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
-import { ddbDocClient } from "../shared/util";
-import { UpdateItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
+import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util"; // Assuming your utility functions are here
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand, UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
 
-// Helper function to create standardized responses
-function createResponse(statusCode: number, body: object) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify(body),
-  };
-}
+const ddbDocClient = createDDbDocClient();
 
-export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
-    // 1. Parse cookies to get the JWT token
+    console.log("Event: ", JSON.stringify(event));
+
+    // Extract and verify authentication token from cookies
     const cookies: CookieMap = parseCookies(event);
-    if (!cookies || !cookies.token) {
-      console.log("No token found in cookies");
-      return createResponse(401, { message: "Unauthorized: No token provided" });
+    if (!cookies?.token) {
+      return {
+        statusCode: 401,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
+      };
     }
 
-    // 2. Verify the JWT token using the authorizer function
-    const verifiedJwt: JwtToken = await verifyToken(
-      cookies.token,
-      process.env.USER_POOL_ID,
-      process.env.REGION!
-    );
-
-    if (!verifiedJwt) {
-      console.log("Token verification failed");
-      return createResponse(401, { message: "Unauthorized: Invalid token" });
+    let verifiedJwt: JwtToken;
+    try {
+      verifiedJwt = await verifyToken(
+        cookies.token,
+        process.env.USER_POOL_ID!,
+        process.env.REGION!
+      );
+    } catch (err) {
+      console.error("JWT Verification failed: ", err);
+      return {
+        statusCode: 403,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Forbidden: Invalid token" }),
+      };
     }
 
-    // 3. Fetch the review to check if the reviewer is the same
-    const reviewId = event.pathParameters?.reviewId;
-    const movieId = event.pathParameters?.movieId;
+    console.log("Verified JWT: ", JSON.stringify(verifiedJwt));
 
-    if (!reviewId || !movieId) {
-      return createResponse(400, { message: "Bad Request: Missing review or movie ID" });
+    // Extract movieId and reviewId from path parameters
+    const pathParameters = event.pathParameters;
+    if (!pathParameters) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Invalid path parameters" }),
+      };
     }
 
-    // Fetch review from DynamoDB
-    const review = await getMovieReview(movieId, reviewId);
-    if (review.ReviewerId.S !== verifiedJwt.sub) {
-      return createResponse(403, { message: "Forbidden: You cannot update this review" });
+    const { movieId, reviewId } = pathParameters;
+    if (!movieId || !reviewId) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Invalid movieId or reviewId" }),
+      };
     }
 
-    // 4. Update the review content
+    // Extract and validate request body
     const body = event.body ? JSON.parse(event.body) : undefined;
-    if (!body || !body.content) {
-      return createResponse(400, { message: "Bad Request: Missing content field" });
+    if (!body || !body.content || !body.reviewerId) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Missing request body, content, or reviewerId" }),
+      };
     }
 
-    const updateParams = {
-      TableName: "MovieReviews",
-      Key: {
-        MovieId: { S: movieId },
-        ReviewId: { S: reviewId },
-      },
-      UpdateExpression: "set Content = :content",
-      ExpressionAttributeValues: {
-        ":content": { S: body.content },
-      },
-      ReturnValues: "UPDATED_NEW" as const,
+    const { reviewerId, content, reviewDate } = body;
+
+    // Fetch the existing review from DynamoDB to validate the reviewerId
+    const getCommandInput = {
+      TableName: process.env.TABLE_NAME!,
+      Key: { movieId, reviewId },
     };
 
-    // Step 5: Execute the update
-    const result = await ddbDocClient.send(new UpdateItemCommand(updateParams));
-    if (!result.Attributes) {
-      return createResponse(500, { message: "Failed to fetch updated attributes" });
+    const { Item } = await ddbDocClient.send(new GetCommand(getCommandInput));
+    if (!Item) {
+      return {
+        statusCode: 404,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Review not found" }),
+      };
     }
 
-    return createResponse(200, { message: "Review updated successfully", updatedAttributes: result.Attributes });
-  } catch (err) {
-    console.error("Error updating review:", err);
-    return createResponse(500, { message: "Internal Server Error" });
+    // Check if the reviewerId matches the one in the database
+    if (Item.reviewerId !== reviewerId) {
+      return {
+        statusCode: 403,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Forbidden: reviewerId mismatch" }),
+      };
+    }
+
+    // Prepare the update command for DynamoDB
+    const updateCommandInput: UpdateCommandInput = {
+      TableName: process.env.TABLE_NAME!,
+      Key: { movieId, reviewId },
+      UpdateExpression: "set content = :c, reviewDate = :r",
+      ExpressionAttributeValues: {
+        ":c": content,
+        ":r": reviewDate || null,
+      },
+    };
+
+    // Update the review in DynamoDB
+    console.log("Updating review in DynamoDB: ", JSON.stringify(updateCommandInput));
+    await ddbDocClient.send(new UpdateCommand(updateCommandInput));
+
+    return {
+      statusCode: 200,
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ message: "Review updated successfully" }),
+    };
+  } catch (error: any) {
+    console.error("Error updating review: ", error);
+    return {
+      statusCode: 500,
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ message: "Internal Server Error", error: error.message }),
+    };
   }
 };
 
-// Helper function to fetch a movie review from DynamoDB
-async function getMovieReview(movieId: string, reviewId: string) {
-  const params = {
-    TableName: "MovieReviews",
-    Key: {
-      MovieId: { S: movieId },
-      ReviewId: { S: reviewId },
-    },
-  };
-
-  try {
-    const result = await ddbDocClient.send(new GetItemCommand(params));
-    if (!result.Item) {
-      throw new Error("Review not found");
-    }
-    return result.Item;
-  } catch (err) {
-    console.error("Error fetching review:", err);
-    throw err;
-  }
+// Create a DynamoDB Document Client
+function createDDbDocClient() {
+  const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+  return DynamoDBDocumentClient.from(ddbClient, {
+    marshallOptions: { convertEmptyValues: true, removeUndefinedValues: true },
+    unmarshallOptions: { wrapNumbers: false },
+  });
 }
