@@ -1,5 +1,5 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
+import { CookieMap, parseCookies, verifyToken, JwtToken, createPolicy } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
@@ -9,126 +9,113 @@ const ajv = new Ajv();
 const isValidBodyParams = ajv.compile(schema.definitions["MovieReview"] || {});
 const ddbDocClient = createDDbDocClient();
 
-export const handler: APIGatewayProxyHandlerV2 = async function (event: any) {
-    console.log("[EVENT]", JSON.stringify(event));
+// Function to generate a random reviewId
+const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
-    try {
-        // Parse cookies to get the JWT token
-        const cookies: CookieMap = parseCookies(event);
-        if (!cookies) {
-            return {
-                statusCode: 401,
-                headers: {
-                    "content-type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                },
-                body: JSON.stringify({ message: "Unauthorized: No token provided" }),
-            };
-        }
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  try {
+    console.log("Event: ", JSON.stringify(event));
 
-        // Verify the JWT token using the authorizer function
-        const verifiedJwt: JwtToken = await verifyToken(
-            cookies.token,
-            process.env.USER_POOL_ID,
-            process.env.REGION!
-        );
-
-        if (!verifiedJwt) {
-            return {
-                statusCode: 401, // Unauthorized
-                headers: {
-                    "content-type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                },
-                body: JSON.stringify({ message: "Unauthorized: Invalid token" }),
-            };
-        }
-
-        // Parse and validate the request body
-        const body = event.body ? JSON.parse(event.body) : undefined;
-        if (!body) {
-            return {
-                statusCode: 400, // Bad request
-                headers: {
-                    "content-type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                },
-                body: JSON.stringify({ message: "Missing request body" }),
-            };
-        }
-
-        // Validate body parameters against the MovieReview schema
-        if (!isValidBodyParams(body)) {
-            return {
-                statusCode: 400, // Bad request
-                headers: {
-                    "content-type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                },
-                body: JSON.stringify({
-                    message: `Incorrect type. Must match MovieReview schema`,
-                    schema: schema.definitions["MovieReview"],
-                }),
-            };
-        }
-
-        // Construct the review item to be inserted into DynamoDB
-        const reviewItem = {
-            ...body,
-            reviewerId: verifiedJwt.sub!, // Ensure the reviewerId comes from the token's sub claim
-            movieId: event.pathParameters?.movieId, // Retrieve movieId from URL parameters
-            reviewId: Date.now(), // Use current timestamp as unique review ID
-        };
-
-        // Insert the review into DynamoDB
-        await ddbDocClient.send(
-            new PutCommand({
-                TableName: process.env.TABLE_NAME!,
-                Item: reviewItem,
-            })
-        );
-
-        // Return success response
-        return {
-            statusCode: 201, // Created
-            headers: {
-                "content-type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-            },
-            body: JSON.stringify({ message: "Review added" }),
-        };
-    } catch (error: any) {
-        console.log("Error: ", error);
-
-        // Return server error response in case of an exception
-        return {
-            statusCode: 500, // Internal Server Error
-            headers: {
-                "content-type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-            },
-            body: JSON.stringify({ message: error.message }),
-        };
+    // Extract and verify authentication token from cookies
+    const cookies: CookieMap = parseCookies(event);
+    if (!cookies?.token) {
+      return {
+        statusCode: 401,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
+      };
     }
+
+    let verifiedJwt: JwtToken;
+    try {
+      verifiedJwt = await verifyToken(
+        cookies.token,
+        process.env.USER_POOL_ID!,
+        process.env.REGION!
+      );
+    } catch (err) {
+      console.error("JWT Verification failed: ", err);
+      return {
+        statusCode: 403,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Forbidden: Invalid token" }),
+      };
+    }
+
+    console.log("Verified JWT: ", JSON.stringify(verifiedJwt));
+
+    // Extract movieId from path parameters
+    const movieId = event.pathParameters?.movieId;
+    if (!movieId || isNaN(Number(movieId))) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Invalid movieId. It must be a valid number." }),
+      };
+    }
+
+    // Parse and validate request body
+    const body = event.body ? JSON.parse(event.body) : undefined;
+    if (!body) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Missing request body" }),
+      };
+    }
+
+    if (!isValidBodyParams(body)) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Invalid request body", schema: schema.definitions["MovieReview"] }),
+      };
+    }
+
+    const { reviewerId, reviewDate, content } = body;
+
+    // Generate a unique reviewId
+    const reviewId = generateReviewId();
+
+    // Validate environment variables
+    const tableName = process.env.TABLE_NAME;
+    if (!tableName) {
+      throw new Error("TABLE_NAME environment variable is not set");
+    }
+
+    // Prepare review data
+    const reviewData = { 
+      movieId: Number(movieId), 
+      reviewId, 
+      reviewerId, 
+      reviewDate, 
+      content 
+    };
+
+    console.log("Writing to DynamoDB: ", JSON.stringify(reviewData));
+
+    await ddbDocClient.send(new PutCommand({ TableName: tableName, Item: reviewData }));
+
+    return {
+      statusCode: 201,
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ message: "Review added successfully", reviewId }),
+    };
+  } catch (error: any) {
+    console.error("Error adding review: ", error);
+    return {
+      statusCode: 500,
+      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ message: "Internal Server Error", error: error.message }),
+    };
+  }
 };
 
-// Define createDDbDocClient function outside the handler
+// Create a DynamoDB Document Client
 function createDDbDocClient() {
-    const ddbClient = new DynamoDBClient({ region: process.env.REGION });
-    const marshallOptions = {
-        convertEmptyValues: true,
-        removeUndefinedValues: true,
-        convertClassInstanceToMap: true,
-    };
-    const unmarshallOptions = {
-        wrapNumbers: false,
-    };
-    const translateConfig = { marshallOptions, unmarshallOptions };
-    return DynamoDBDocumentClient.from(ddbClient, translateConfig);
+  const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+  return DynamoDBDocumentClient.from(ddbClient, {
+    marshallOptions: { convertEmptyValues: true, removeUndefinedValues: true },
+    unmarshallOptions: { wrapNumbers: false },
+  });
 }

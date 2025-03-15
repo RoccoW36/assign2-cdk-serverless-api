@@ -48,7 +48,6 @@ export type ReviewUpdatePayload = {
   content?: string;
 };
 
-// --- Authentication Types ---
 export type AuthApiProps = {
   userPoolId: string;
   userPoolClientId: string;
@@ -68,28 +67,6 @@ export type ConfirmSignUpBody = {
 export type SignInBody = {
   username: string;
   password: string;
-};
-
-export type AuthResponse = {
-  message: string;
-  token?: string; // JWT token (only for successful sign-in)
-  refreshToken?: string; // Refresh token if needed
-};
-
-export type JwtAuthorizerClaims = {
-  email: string;
-  sub: string;
-  [key: string]: any;
-};
-
-export type APIGatewayEventWithAuth = {
-  requestContext: {
-    authorizer?: {
-      jwt?: {
-        claims?: JwtAuthorizerClaims;
-      };
-    };
-  };
 };
 
 export type AppApiProps = {

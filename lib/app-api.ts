@@ -28,16 +28,6 @@ export class AppAPI extends Construct {
       },
     };
 
-    // Create API Gateway
-    const appApi = new apig.RestApi(this, "AppApi", {
-      description: "App RestApi",
-      deployOptions: { stageName: "dev" },
-      endpointTypes: [apig.EndpointType.REGIONAL],
-      defaultCorsPreflightOptions: {
-        allowOrigins: apig.Cors.ALL_ORIGINS,
-      },
-    });
-
     // Create DynamoDB Table
     const movieReviewsTable = new dynamodb.Table(this, "MovieReviewsTable", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -73,13 +63,19 @@ export class AppAPI extends Construct {
     });
 
     // Create Lambda Authorizer
-    const authorizerFn = this.createLambda("AuthorizerFn", "./lambdas/auth/authorizer.ts");
+    const authorizerFn =  new lambdanode.NodejsFunction(this, "AuthorizerFn", {
+      ...appCommonFnProps,
+      entry: "./lambdas/auth/authorizer.ts",
+    });
 
-    const requestAuthorizer = new apig.RequestAuthorizer(this, "RequestAuthorizer", {
+    const requestAuthorizer = new apig.RequestAuthorizer(
+      this, "RequestAuthorizer", 
+      {
       identitySources: [apig.IdentitySource.header("cookie")],
       handler: authorizerFn,
       resultsCacheTtl: cdk.Duration.minutes(0),
-    });
+    }
+  );
 
     // Create Lambda function helper
     const createLambda = (id: string, entry: string, additionalEnv?: Record<string, string>) =>
@@ -95,8 +91,7 @@ export class AppAPI extends Construct {
 
     // Define Lambda functions
     const getAllMovieReviewsFn = createLambda("getAllMovieReviewsFn", path.join(__dirname, "../lambdas/getAllMovieReviews.ts"), {
-      GSI_REVIEWER_INDEX: "ReviewerIndex",
-    });
+      GSI_REVIEWER_INDEX: "ReviewerIndex",});
     const getMovieReviewByIdFn = createLambda("getMovieReviewByIdFn", path.join(__dirname, "../lambdas/getMovieReviewById.ts"));
     const addMovieReviewFn = createLambda("AddMovieReviewFn", path.join(__dirname, "../lambdas/addMovieReview.ts"));
     const updateMovieReviewFn = createLambda("UpdateMovieReviewFn", path.join(__dirname, "../lambdas/updateMovieReview.ts"));
@@ -117,6 +112,20 @@ export class AppAPI extends Construct {
     );
 
     // REST API Setup
+
+   // Create API Gateway
+   const appApi = new apig.RestApi(this, "MovieReviewsAPI", {
+    description: "Movie Reviews Api",
+    deployOptions: { 
+      stageName: "dev" 
+    },
+    endpointTypes: [apig.EndpointType.REGIONAL],
+    defaultCorsPreflightOptions: {
+      allowOrigins: apig.Cors.ALL_ORIGINS,
+    },
+  });
+
+    // Define API Resources
     const movieReviewsEndpoint = appApi.root.addResource("movies");
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
     const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
@@ -124,31 +133,20 @@ export class AppAPI extends Construct {
     const translateReviewResource = reviewResource.addResource("translate").addResource("{language}");
 
     // API Gateway Methods
-    movieReviewsEndpoint.addResource("all-reviews").addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn));
-    movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn));
-    translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn));
-    movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn), {
+    const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
+    allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
+    movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
+    translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+    movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
       authorizer: requestAuthorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,
+      authorizationType: apig.AuthorizationType.CUSTOM,  
     });
-    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn), {
-      authorizer: requestAuthorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,
-    });
-  }
 
-  // Helper function to create Lambda functions with common props
-  private createLambda(id: string, entry: string, additionalEnv?: Record<string, string>) {
-    return new lambdanode.NodejsFunction(this, id, {
-      architecture: lambda.Architecture.ARM_64,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      runtime: lambda.Runtime.NODEJS_22_X,
-      environment: {
-        REGION: cdk.Aws.REGION,
-        ...additionalEnv,
-      },
-      entry,
+    reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
+      authorizer: requestAuthorizer,
+      authorizationType: apig.AuthorizationType.CUSTOM,  
     });
+
+    }
+
   }
-}

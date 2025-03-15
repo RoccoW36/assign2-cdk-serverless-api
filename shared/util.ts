@@ -6,8 +6,9 @@ import {
   PolicyDocument,
   APIGatewayProxyEvent,
   StatementEffect,
-  APIGatewayProxyEventV2,
 } from "aws-lambda";
+
+
 import axios from "axios";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import jwkToPem from "jwk-to-pem";
@@ -93,10 +94,8 @@ export const verifyToken = async (
       throw new Error("User pool ID is undefined.");
     }
 
-    // Construct the URL for the JWKS endpoint in Cognito
-    const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
-    
     // Fetch the JWK (JSON Web Key) set from Cognito
+    const url = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
     const { data }: { data: Jwk } = await axios.get(url);
 
     // Find the RSA key in the JWK set
@@ -123,7 +122,7 @@ export const verifyToken = async (
   }
 };
 
-
+// Create an IAM policy for API Gateway authorizer
 export const createPolicy = (
   event: APIGatewayAuthorizerEvent,
   effect: StatementEffect

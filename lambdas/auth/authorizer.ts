@@ -2,16 +2,15 @@ import { APIGatewayRequestAuthorizerHandler } from "aws-lambda";
 import { CookieMap, createPolicy, parseCookies, verifyToken } from "../../shared/util";
 
 export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
-  console.log("[EVENT]", JSON.stringify(event, null, 2)); // Log the event to help debug
+  console.log("[EVENT]", event, null, 2);
 
   // Parse cookies from the event
   const cookies: CookieMap = parseCookies(event);
 
-  // If no cookies are found, deny the request
   if (!cookies || !cookies.token) {
     console.error("No cookies or token found.");
     return {
-      principalId: "",
+      principalId: "unauthorised",
       policyDocument: createPolicy(event, "Deny"),
     };
   }
@@ -25,7 +24,7 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
 
   // If the JWT token is valid, return an 'Allow' policy, otherwise 'Deny'
   return {
-    principalId: verifiedJwt ? verifiedJwt.sub!.toString() : "", // Extract 'sub' from JWT
+    principalId: verifiedJwt ? verifiedJwt.sub!.toString() : "", 
     policyDocument: createPolicy(event, verifiedJwt ? "Allow" : "Deny"),
   };
 };
