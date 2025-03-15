@@ -43,6 +43,7 @@ export type TranslatedReview = {
 };
 
 export type ReviewUpdatePayload = {
+  movieId: number;
   reviewerId: string;
   reviewDate?: string;
   content?: string;

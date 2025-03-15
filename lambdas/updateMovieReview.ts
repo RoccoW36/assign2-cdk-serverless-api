@@ -1,105 +1,103 @@
-import { APIGatewayProxyEvent } from 'aws-lambda';
-import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
-import { ddbDocClient } from "../shared/util";
-import { UpdateItemCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
+import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, UpdateCommand, UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
 
-// Helper function to create standardized responses
-function createResponse(statusCode: number, body: object) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-    body: JSON.stringify(body),
-  };
-}
+const ddbDocClient = createDDbDocClient();
 
-export const updateMovieReview = async (event: APIGatewayProxyEvent) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
   try {
-    // 1. Parse cookies to get the JWT token
-    const cookies: CookieMap = parseCookies(event);
-    if (!cookies || !cookies.token) {
-      console.log("No token found in cookies");
-      return createResponse(401, { message: "Unauthorized: No token provided" });
-    }
+    console.log("Event: ", event);
 
-    // 2. Verify the JWT token using the authorizer function
-    const verifiedJwt: JwtToken = await verifyToken(
-      cookies.token,
-      process.env.USER_POOL_ID,
-      process.env.REGION!
-    );
-
-    if (!verifiedJwt) {
-      console.log("Token verification failed");
-      return createResponse(401, { message: "Unauthorized: Invalid token" });
-    }
-
-    // 3. Fetch the review to check if the reviewer is the same
-    const reviewId = event.pathParameters?.reviewId;
-    const movieId = event.pathParameters?.movieId;
-
-    if (!reviewId || !movieId) {
-      return createResponse(400, { message: "Bad Request: Missing review or movie ID" });
-    }
-
-    // Fetch review from DynamoDB
-    const review = await getMovieReview(movieId, reviewId);
-    if (review.ReviewerId.S !== verifiedJwt.sub) {
-      return createResponse(403, { message: "Forbidden: You cannot update this review" });
-    }
-
-    // 4. Update the review content
+    // Parse request body
     const body = event.body ? JSON.parse(event.body) : undefined;
-    if (!body || !body.content) {
-      return createResponse(400, { message: "Bad Request: Missing content field" });
+    const { content, reviewDate } = body;
+
+    // Validate the input (ensure content is provided)
+    if (!content) {
+      return {
+        statusCode: 400,
+        headers: {
+          "content-type": "application/json",
+          "Access-Control-Allow-Headers": "*",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify({ message: "Content is required" }),
+      };
     }
 
-    const updateParams = {
-      TableName: "MovieReviews",
-      Key: {
-        MovieId: { S: movieId },
-        ReviewId: { S: reviewId },
-      },
-      UpdateExpression: "set Content = :content",
-      ExpressionAttributeValues: {
-        ":content": { S: body.content },
-      },
-      ReturnValues: "UPDATED_NEW" as const,
+    // Extract path parameters
+    const parameters = event?.pathParameters;
+    const movieId = parameters?.movieId ? parseInt(parameters.movieId) : undefined;
+    const reviewerId = parameters?.reviewerId;
+
+    if (!movieId || !reviewerId) {
+      return {
+        statusCode: 400,
+        headers: {
+          "content-type": "application/json",
+          "Access-Control-Allow-Headers": "*",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify({ message: "Missing path parameters" }),
+      };
+    }
+
+    // Fetch the existing review to ensure reviewerId matches the stored review
+    // This can be done with a GetItem or Query on DynamoDB (to be added)
+
+    // Create update command input
+    let updateExpression = "set content = :content";
+    const expressionAttributes: { [key: string]: any } = {
+      ":content": content,
     };
 
-    // Step 5: Execute the update
-    const result = await ddbDocClient.send(new UpdateItemCommand(updateParams));
-    if (!result.Attributes) {
-      return createResponse(500, { message: "Failed to fetch updated attributes" });
+    if (reviewDate) {
+      updateExpression += ", reviewDate = :reviewDate";
+      expressionAttributes[":reviewDate"] = reviewDate;
     }
 
-    return createResponse(200, { message: "Review updated successfully", updatedAttributes: result.Attributes });
-  } catch (err) {
-    console.error("Error updating review:", err);
-    return createResponse(500, { message: "Internal Server Error" });
+    const commandInput: UpdateCommandInput = {
+      TableName: process.env.TABLE_NAME,
+      Key: { movieId, reviewerId },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributes,
+    };
+
+    const commandOutput = await ddbDocClient.send(new UpdateCommand(commandInput));
+
+    return {
+      statusCode: 200,
+      headers: {
+        "content-type": "application/json",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Origin": "*",
+      },
+      body: JSON.stringify({ message: "Review updated successfully" }),
+    };
+  } catch (error: any) {
+    console.error(error);
+    return {
+      statusCode: 500,
+      headers: {
+        "content-type": "application/json",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Origin": "*",
+      },
+      body: JSON.stringify({ message: error.message }),
+    };
   }
 };
 
-// Helper function to fetch a movie review from DynamoDB
-async function getMovieReview(movieId: string, reviewId: string) {
-  const params = {
-    TableName: "MovieReviews",
-    Key: {
-      MovieId: { S: movieId },
-      ReviewId: { S: reviewId },
-    },
+function createDDbDocClient() {
+  const ddbClient = new DynamoDBClient({ region: process.env.REGION });
+  const marshallOptions = {
+    convertEmptyValues: true,
+    removeUndefinedValues: true,
+    convertClassInstanceToMap: true,
   };
-
-  try {
-    const result = await ddbDocClient.send(new GetItemCommand(params));
-    if (!result.Item) {
-      throw new Error("Review not found");
-    }
-    return result.Item;
-  } catch (err) {
-    console.error("Error fetching review:", err);
-    throw err;
-  }
+  const unmarshallOptions = {
+    wrapNumbers: false,
+  };
+  const translateConfig = { marshallOptions, unmarshallOptions };
+  return DynamoDBDocumentClient.from(ddbClient, translateConfig);
 }
