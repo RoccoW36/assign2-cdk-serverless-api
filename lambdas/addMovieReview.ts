@@ -1,4 +1,4 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { APIGatewayProxyHandler } from "aws-lambda";
 import { CookieMap, parseCookies, verifyToken, JwtToken, createPolicy } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
@@ -12,7 +12,7 @@ const ddbDocClient = createDDbDocClient();
 // Function to generate a random reviewId
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandler = async (event) => {
   try {
     console.log("Event: ", JSON.stringify(event));
 

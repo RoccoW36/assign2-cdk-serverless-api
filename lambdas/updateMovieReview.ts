@@ -1,22 +1,24 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util"; // Assuming your utility functions are here
+import { APIGatewayProxyHandler } from "aws-lambda";
+import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  UpdateCommand,
+  UpdateCommandInput,
+} from "@aws-sdk/lib-dynamodb";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand, UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
+
 
 const ddbDocClient = createDDbDocClient();
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandler = async (event) => {
   try {
-    console.log("Event: ", JSON.stringify(event));
+    console.log("Received event: ", JSON.stringify(event));
 
     // Extract and verify authentication token from cookies
     const cookies: CookieMap = parseCookies(event);
     if (!cookies?.token) {
-      return {
-        statusCode: 401,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
-      };
+      return createErrorResponse(401, "Unauthorized: Missing token");
     }
 
     let verifiedJwt: JwtToken;
@@ -28,161 +30,98 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       );
     } catch (err) {
       console.error("JWT Verification failed: ", err);
-      return {
-        statusCode: 403,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Forbidden: Invalid token" }),
-      };
+      return createErrorResponse(403, "Forbidden: Invalid token");
     }
 
     console.log("Verified JWT: ", JSON.stringify(verifiedJwt));
 
-    // Extract movieId and reviewId from path parameters
+    // Extract path parameters
     const pathParameters = event.pathParameters;
-    if (!pathParameters) {
-      return {
-        statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Invalid path parameters" }),
-      };
+    if (!pathParameters?.movieId || !pathParameters?.reviewId) {
+      return createErrorResponse(400, "Invalid path parameters: movieId and reviewId required");
     }
 
-    const { movieId, reviewId } = pathParameters;
-    if (!movieId || !reviewId) {
-      return {
-        statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Invalid movieId or reviewId" }),
-      };
+    const movieId = parseInt(pathParameters.movieId);
+    const reviewId = parseInt(pathParameters.reviewId);
+    if (isNaN(movieId) || isNaN(reviewId)) {
+      return createErrorResponse(400, "movieId and reviewId must be numbers");
     }
 
     // Extract and validate request body
-    const body = event.body ? JSON.parse(event.body) : undefined;
-    if (!body || !body.content || !body.reviewerId) {
-      return {
-        statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Missing request body, content, or reviewerId" }),
-      };
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, UpdateCommand, UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
-
-const ddbDocClient = createDDbDocClient();
-
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
-  try {
-    console.log("Event: ", event);
-
-    // Parse request body
-    const body = event.body ? JSON.parse(event.body) : undefined;
-    const { content, reviewDate } = body;
-
-    // Validate the input (ensure content is provided)
-    if (!content) {
-      return {
-        statusCode: 400,
-        headers: {
-          "content-type": "application/json",
-          "Access-Control-Allow-Headers": "*",
-          "Access-Control-Allow-Origin": "*",
-        },
-        body: JSON.stringify({ message: "Content is required" }),
-      };
+    if (!event.body) {
+      return createErrorResponse(400, "Request body is missing");
     }
 
-    // Extract path parameters
-    const parameters = event?.pathParameters;
-    const movieId = parameters?.movieId ? parseInt(parameters.movieId) : undefined;
-    const reviewerId = parameters?.reviewerId;
+    const body = JSON.parse(event.body);
+    const { content, reviewDate, reviewerId } = body;
 
-    if (!movieId || !reviewerId) {
-      return {
-        statusCode: 400,
-        headers: {
-          "content-type": "application/json",
-          "Access-Control-Allow-Headers": "*",
-          "Access-Control-Allow-Origin": "*",
-        },
-        body: JSON.stringify({ message: "Missing path parameters" }),
-      };
+    if (!content || !reviewerId) {
+      return createErrorResponse(400, "Content and reviewerId are required");
     }
 
-    // Fetch the existing review to ensure reviewerId matches the stored review
-    // This can be done with a GetItem or Query on DynamoDB (to be added)
-
-    // Create update command input
-    let updateExpression = "set content = :content";
-    const expressionAttributes: { [key: string]: any } = {
-      ":content": content,
-    };
-
-    if (reviewDate) {
-      updateExpression += ", reviewDate = :reviewDate";
-      expressionAttributes[":reviewDate"] = reviewDate;
-    }
-
-    const { reviewerId, content, reviewDate } = body;
-
-    // Fetch the existing review from DynamoDB to validate the reviewerId
+    // Fetch the existing review from DynamoDB
     const getCommandInput = {
       TableName: process.env.TABLE_NAME!,
       Key: { movieId, reviewId },
     };
 
     const { Item } = await ddbDocClient.send(new GetCommand(getCommandInput));
+
     if (!Item) {
-      return {
-        statusCode: 404,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Review not found" }),
-      };
+      return createErrorResponse(404, "Review not found");
     }
 
-    // Check if the reviewerId matches the one in the database
+    // Validate that the requester is the owner of the review
     if (Item.reviewerId !== reviewerId) {
-      return {
-        statusCode: 403,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ message: "Forbidden: reviewerId mismatch" }),
-      };
+      return createErrorResponse(403, "Forbidden: reviewerId mismatch");
     }
 
     // Prepare the update command for DynamoDB
+    const updateExpression = "set content = :c, reviewDate = :r";
+    const expressionAttributes = {
+      ":c": content,
+      ":r": reviewDate || Item.reviewDate, // Keep original date if not provided
+    };
+
     const updateCommandInput: UpdateCommandInput = {
       TableName: process.env.TABLE_NAME!,
       Key: { movieId, reviewId },
-      UpdateExpression: "set content = :c, reviewDate = :r",
-      ExpressionAttributeValues: {
-        ":c": content,
-        ":r": reviewDate || null,
-      },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributes,
     };
 
     // Update the review in DynamoDB
     console.log("Updating review in DynamoDB: ", JSON.stringify(updateCommandInput));
     await ddbDocClient.send(new UpdateCommand(updateCommandInput));
 
-    return {
-      statusCode: 200,
-      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ message: "Review updated successfully" }),
-    };
+    return createSuccessResponse({ message: "Review updated successfully" });
   } catch (error: any) {
     console.error("Error updating review: ", error);
-    return {
-      statusCode: 500,
-      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ message: "Internal Server Error", error: error.message }),
-    };
+    return createErrorResponse(500, "Internal Server Error", error.message);
   }
 };
 
-// Create a DynamoDB Document Client
+// Utility Functions
 function createDDbDocClient() {
   const ddbClient = new DynamoDBClient({ region: process.env.REGION });
   return DynamoDBDocumentClient.from(ddbClient, {
     marshallOptions: { convertEmptyValues: true, removeUndefinedValues: true },
     unmarshallOptions: { wrapNumbers: false },
   });
+}
+
+function createErrorResponse(statusCode: number, message: string, error?: string) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+    body: JSON.stringify({ message, error }),
+  };
+}
+
+function createSuccessResponse(body: any) {
+  return {
+    statusCode: 200,
+    headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+    body: JSON.stringify(body),
+  };
 }
