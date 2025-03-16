@@ -4,7 +4,7 @@ import { CookieMap, createPolicy, parseCookies, verifyToken } from "../../shared
 export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
   console.log("[EVENT]", event, null, 2);
 
-  // Parse cookies from the event
+  // Parse cookies
   const cookies: CookieMap = parseCookies(event);
 
   if (!cookies || !cookies.token) {
@@ -17,12 +17,11 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
 
   // Verify the JWT token
   const verifiedJwt = await verifyToken(
-    cookies.token, // Extracted token from cookies
-    process.env.USER_POOL_ID, // User pool ID from environment variable
-    process.env.REGION! // AWS region from environment variable
+    cookies.token, 
+    process.env.USER_POOL_ID, 
+    process.env.REGION!
   );
 
-  // If the JWT token is valid, return an 'Allow' policy, otherwise 'Deny'
   return {
     principalId: verifiedJwt ? verifiedJwt.sub!.toString() : "", 
     policyDocument: createPolicy(event, verifiedJwt ? "Allow" : "Deny"),

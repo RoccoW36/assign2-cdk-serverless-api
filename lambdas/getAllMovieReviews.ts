@@ -20,7 +20,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       response = await ddbDocClient.send(
         new QueryCommand({
           TableName: TABLE_NAME,
-          IndexName: GSI_REVIEWER_INDEX, // GSI where reviewerId is the partition key
+          IndexName: GSI_REVIEWER_INDEX,
           KeyConditionExpression: "reviewerId = :reviewerId",
           ExpressionAttributeValues: { ":reviewerId": reviewerId },
         })

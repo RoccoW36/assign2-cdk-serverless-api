@@ -80,7 +80,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const updateExpression = "set content = :c, reviewDate = :r";
     const expressionAttributes = {
       ":c": content,
-      ":r": reviewDate || Item.reviewDate, // Keep original date if not provided
+      ":r": reviewDate || Item.reviewDate,
     };
 
     const updateCommandInput: UpdateCommandInput = {

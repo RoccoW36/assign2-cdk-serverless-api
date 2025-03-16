@@ -9,7 +9,6 @@ const ajv = new Ajv();
 const isValidBodyParams = ajv.compile(schema.definitions["MovieReview"] || {});
 const ddbDocClient = createDDbDocClient();
 
-// Function to generate a random reviewId
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
 export const handler: APIGatewayProxyHandler = async (event) => {
