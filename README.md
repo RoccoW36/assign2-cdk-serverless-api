@@ -5,6 +5,12 @@
 **Student Number:** 01318411  
 **Student Email:** [01318411@mail.wit.ie](mailto:01318411@mail.wit.ie)
 
+## GitHub Repository  
+[assign1-serverless-movie-reviews-api](https://github.com/RoccoW36/assign1-serverless-movie-reviews-api)  
+
+## YouTube Demo  
+[Watch the Demo](https://www.youtube.com/watch?v=ZcYaq3EdJCw)  
+
 ## Overview
 This project is a secure, serverless Web API for managing movie reviews, built using AWS CDK (TypeScript) and deployed on AWS Lambda, API Gateway, DynamoDB, and Cognito. The API supports review posting, updating, retrieving, and translation, with authentication handled via Cognito and role-based authorization enforced through a custom Lambda authorizer.
 
@@ -58,9 +64,3 @@ The **MovieReviews Table** stores review data with the following schema:
 | `translations` | Map | Cached translations to avoid duplicate API calls. |
 
 ---
-
-## Deployment
-
-### **1. Install dependencies**
-```sh
-npm install
