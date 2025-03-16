@@ -1,12 +1,12 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddbClient = new DynamoDBClient({ region: process.env.REGION });
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 
 const TABLE_NAME = process.env.TABLE_NAME!;
-const GSI_REVIEWER_INDEX = process.env.GSI_REVIEWER_INDEX!;
+const GSI_REVIEWER_INDEX = "ReviewerIndex";
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
@@ -27,17 +27,20 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     let response;
 
     if (reviewerId) {
+      // Query using the GSI with movieId and reviewerId
       response = await ddbDocClient.send(
-        new ScanCommand({
+        new QueryCommand({
           TableName: TABLE_NAME,
-          FilterExpression: "reviewerId = :reviewerId AND movieId = :movieId",
+          IndexName: GSI_REVIEWER_INDEX, // Use the correct GSI name
+          KeyConditionExpression: "movieId = :movieId and reviewerId = :reviewerId",
           ExpressionAttributeValues: {
-            ":reviewerId": reviewerId,
             ":movieId": movieId,
+            ":reviewerId": reviewerId,
           },
         })
       );
     } else {
+      // Query using the primary index with only movieId
       response = await ddbDocClient.send(
         new QueryCommand({
           TableName: TABLE_NAME,

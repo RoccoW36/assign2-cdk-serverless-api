@@ -40,8 +40,8 @@ export class AppAPI extends Construct {
     // Add Global Secondary Index
     movieReviewsTable.addGlobalSecondaryIndex({
       indexName: "ReviewerIndex",
-      partitionKey: { name: "reviewerId", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "reviewDate", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "movieId", type: dynamodb.AttributeType.NUMBER },
+      sortKey: { name: "reviewerId", type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
