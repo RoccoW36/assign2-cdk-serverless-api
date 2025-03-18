@@ -1,66 +1,61 @@
-# Serverless Movie Review API
+## Enterprise Web Development module - Serverless REST Assignment.
 
-## Author Information
-**Student Name:** Martin Walsh  
-**Student Number:** 01318411  
-**Student Email:** [01318411@mail.wit.ie](mailto:01318411@mail.wit.ie)
+__Name:__ Martin Walsh
 
-## GitHub Repository  
-[assign1-serverless-movie-reviews-api](https://github.com/RoccoW36/assign1-serverless-movie-reviews-api)  
+__Demo:__ https://www.youtube.com/watch?v=ZcYaq3EdJCw
 
-## YouTube Demo  
-[Watch the Demo](https://www.youtube.com/watch?v=ZcYaq3EdJCw)  
+### Overview.
 
-## Overview
-This project is a secure, serverless Web API for managing movie reviews, built using AWS CDK (TypeScript) and deployed on AWS Lambda, API Gateway, DynamoDB, and Cognito. The API supports review posting, updating, retrieving, and translation, with authentication handled via Cognito and role-based authorization enforced through a custom Lambda authorizer.
+This repository contains a serverless REST API for Movie Reviews implemented using AWS CDK and Lambda functions. The API allows users to add, retrieve, update, and translate movie reviews, with authentication and authorization mechanisms in place.
 
-## Features
-✅ **Serverless Architecture** – Fully managed, auto-scaling backend using AWS Lambda and DynamoDB.  
-✅ **Authentication & Authorization** – Cognito User Pool with JWT-based authentication, secured by a custom API Gateway Lambda Authorizer.  
-✅ **Movie Review Management** – Users can post and update their reviews; only the original reviewer can edit a review.  
-✅ **Amazon Translate Integration** – Supports translations with caching to reduce redundant API calls.  
-✅ **Infrastructure as Code** – Provisioned using AWS CDK for reproducibility and easy deployment.  
+### App API endpoints.
 
----
++ GET /movies/all-reviews - Get all movie reviews. Supports optional query parameter for filtering by reviewerId.
 
-## API Endpoints
++ GET /movies/{movieId}/reviews - Get all reviews for a specific movie. Supports optional query parameter for filtering by reviewerId.
 
-### **Movie Reviews API (App API)**
-| Method | Endpoint | Description |
-|--------|---------|-------------|
-| **GET** | `/movies/reviews/{movieId}` | Retrieves all reviews for a movie. Supports optional query parameters: <br> `reviewId={id}` → Fetch a specific review. <br> `reviewerId={email}` → Fetch all reviews by a specific reviewer. |
-| **POST** | `/movies/reviews` | Adds a new movie review (requires authentication). |
-| **PUT** | `/movies/{movieId}/reviews/{reviewId}` | Updates an existing review (only allowed by the original reviewer). |
-| **GET** | `/reviews/{reviewId}/{movieId}/translation?language={code}` | Retrieves a translated version of a review. Translations are cached in DynamoDB to prevent duplicate requests. |
++ POST /movies/{movieId}/reviews - Add a new movie review. Requires authentication.
 
-### **Authentication API (Auth API)**
-| Method | Endpoint | Description |
-|--------|---------|-------------|
-| **POST** | `/auth/signup` | Registers a new user. |
-| **POST** | `/auth/signin` | Authenticates a user and returns a JWT in an HttpOnly cookie. |
-| **POST** | `/auth/confirm-signup` | Confirms user registration via a verification code. |
-| **POST** | `/auth/signout` | Logs the user out by clearing the authentication cookie. |
++ PUT /movies/{movieId}/reviews/{reviewId} - Update an existing movie review. Requires authentication and authorization (only the review owner can update).
 
----
++ GET /movies/{movieId}/reviews/{reviewId}/translate/{language} - Translate a specific movie review to the specified language.
 
-## Authentication & Authorization
-- Cognito User Pool is used for authentication.
-- JWT tokens are stored in **HttpOnly cookies** for secure authentication handling.
-- A **custom Lambda Authorizer** validates JWT tokens before granting access to protected endpoints.
-- **Only authenticated users** can post and update reviews.
+### Features.
 
----
+#### Translation persistence
 
-## Data Storage (DynamoDB)
-The **MovieReviews Table** stores review data with the following schema:
+The translation persistence is implemented in the `translateMovieReview.ts` Lambda function. When a translation is requested, the function checks if a cached translation exists and is still valid (based on a TTL). If not, it performs a new translation and stores it in the DynamoDB table.
 
-| Attribute  | Type   | Description |
-|------------|--------|-------------|
-| `movieId`  | Number | Partition key (unique per movie). |
-| `reviewId` | Number | Unique per review (auto-generated). |
-| `reviewerId` | String | Email address of the reviewer. |
-| `reviewDate` | String | Date the review was created (updatable). |
-| `content` | String | Review text (updatable). |
-| `translations` | Map | Cached translations to avoid duplicate API calls. |
+The structure of a table item that includes review translations:
 
----
++ MovieId (Partition key) - Number
++ ReviewId (Sort key) - Number
++ ReviewerId - String (reviewer email address)
++ ReviewDate - String
++ Content - String (the review text)
++ Translations - Map
+  - [language code]: Object
+    - content: String (translated text)
+    - lastUpdated: String (ISO date)
+    - ttl: Number (expiration timestamp)
+
+#### Custom L2 Construct
+
+[Not implemented yet]
+
+#### Restricted review updates
+
+The restricted review updates feature is implemented in the `updateMovieReview.ts` Lambda function. Before allowing an update, the function:
+
+1. Verifies the user's authentication token.
+2. Retrieves the existing review from DynamoDB.
+3. Compares the reviewerId of the existing review with the reviewerId in the update request.
+4. Only allows the update if the reviewerId matches, ensuring that only the original author can modify the review.
+
+This approach ensures that users can only update their own reviews, maintaining data integrity and user ownership of content.
+
+#### API Gateway validators. (if completed)
+
+[Not implemented yet]
+
+
