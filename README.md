@@ -81,8 +81,3 @@ The restricted review updates feature is implemented in the `updateMovieReview.t
 
 This approach ensures that users can only update their own reviews, maintaining data integrity and user ownership of content.
 
-#### API Gateway validators. (if completed)
-
-[Not implemented yet]
-
-
