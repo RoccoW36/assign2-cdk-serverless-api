@@ -57,7 +57,7 @@ A custom L2 construct that sets up the authentication API:
 
 A custom L2 construct that establishes the main application API:
 
-- Sets up Lambda functions for various movie review operations
+- Sets up Lambda functions for the various movie review operations
 - Creates API Gateway resources and methods
 - Handles routing and integration of API requests with Lambda functions
 
