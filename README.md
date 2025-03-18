@@ -41,7 +41,34 @@ The structure of a table item that includes review translations:
 
 #### Custom L2 Construct
 
-[Not implemented yet]
+1. AuthApi (auth-app.ts)
+
+A custom L2 construct that sets up the authentication API:
+
+- Creates an API Gateway dedicated to authentication
+- Implements Lambda functions for user management:
+  - Sign up
+  - Sign in
+  - Confirm sign up
+  - Sign out
+- Configures API routes for each authentication operation
+
+2. AppAPI (app-api.ts)
+
+A custom L2 construct that establishes the main application API:
+
+- Sets up Lambda functions for various movie review operations
+- Creates API Gateway resources and methods
+- Handles routing and integration of API requests with Lambda functions
+
+##### 3. MovieReviewsTable (movie-reviews-table.ts)
+
+A custom L2 construct for data persistence:
+
+- Wraps the creation of a DynamoDB table for storing movie reviews
+- Adds a Global Secondary Index to optimize query performance
+
+These constructs work together to provide a scalable and maintainable architecture for our movie review application, leveraging AWS services for authentication, API management, and data storage.
 
 #### Restricted review updates
 
