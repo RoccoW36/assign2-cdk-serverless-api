@@ -29,10 +29,10 @@ The translation persistence is implemented in the `translateMovieReview.ts` Lamb
 The structure of a table item that includes review translations:
 
 + MovieId (Partition key) - Number
-+ ReviewId (Sort key) - Number
++ ReviewId (Sort key) - Number (auto-generated)
 + ReviewerId - String (reviewer email address)
-+ ReviewDate - String
-+ Content - String (the review text)
++ ReviewDate - String (updatedateable by originator only))
++ Content - String (the review text, updatedateable by originator only)
 + Translations - Map
   - [language code]: Object
     - content: String (translated text)

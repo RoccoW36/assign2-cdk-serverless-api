@@ -1,7 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambdanode from "aws-cdk-lib/aws-lambda-nodejs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as custom from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { generateBatch } from "../shared/util";
@@ -10,6 +9,7 @@ import * as apig from "aws-cdk-lib/aws-apigateway";
 import * as path from "path";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { AppApiProps } from "../shared/types";
+import { MovieReviewsTable } from "./movie-reviews-table";
 
 export class AppAPI extends Construct {
   constructor(scope: Construct, id: string, props: AppApiProps) {
@@ -28,21 +28,9 @@ export class AppAPI extends Construct {
       },
     };
 
-    // Create DynamoDB Table
-    const movieReviewsTable = new dynamodb.Table(this, "MovieReviewsTable", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: { name: "movieId", type: dynamodb.AttributeType.NUMBER },
-      sortKey: { name: "reviewId", type: dynamodb.AttributeType.NUMBER },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    // Create DynamoDB Table using custom construct
+    const movieReviewsTable = new MovieReviewsTable(this, "MovieReviewsTable", {
       tableName: "MovieReviews",
-    });
-
-    // Add Global Secondary Index
-    movieReviewsTable.addGlobalSecondaryIndex({
-      indexName: "ReviewerIndex",
-      partitionKey: { name: "movieId", type: dynamodb.AttributeType.NUMBER },
-      sortKey: { name: "reviewerId", type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
     });
 
     // Seed Data using custom resource
@@ -52,13 +40,13 @@ export class AppAPI extends Construct {
         action: "batchWriteItem",
         parameters: {
           RequestItems: {
-            [movieReviewsTable.tableName]: generateBatch(movieReviews),
+            [movieReviewsTable.table.tableName]: generateBatch(movieReviews),
           },
         },
         physicalResourceId: custom.PhysicalResourceId.of("reviewsddbInitData"),
       },
       policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: [movieReviewsTable.tableArn],
+        resources: [movieReviewsTable.table.tableArn],
       }),
     });
 
@@ -77,32 +65,29 @@ export class AppAPI extends Construct {
     }
   );
 
-    // Create Lambda function helper
-    const createLambda = (id: string, entry: string, additionalEnv?: Record<string, string>) =>
-      new lambdanode.NodejsFunction(this, id, {
-        ...appCommonFnProps,
-        entry,
-        environment: {
-          ...appCommonFnProps.environment,
-          TABLE_NAME: movieReviewsTable.tableName,
-          ...additionalEnv,
-        },
-      });
+    // Update environment variables for Lambda functions
+    const lambdaEnvironment = {
+      ...appCommonFnProps.environment,
+      TABLE_NAME: movieReviewsTable.table.tableName,
+    };
 
     // Define Lambda functions
-    const getAllMovieReviewsFn = createLambda("getAllMovieReviewsFn", path.join(__dirname, "../lambdas/getAllMovieReviews.ts"), {
-      GSI_REVIEWER_INDEX: "ReviewerIndex",});
-    const getMovieReviewByIdFn = createLambda("getMovieReviewByIdFn", path.join(__dirname, "../lambdas/getMovieReviewById.ts"));
-    const addMovieReviewFn = createLambda("AddMovieReviewFn", path.join(__dirname, "../lambdas/addMovieReview.ts"));
-    const updateMovieReviewFn = createLambda("UpdateMovieReviewFn", path.join(__dirname, "../lambdas/updateMovieReview.ts"));
-    const translateMovieReviewFn = createLambda("TranslateMovieReviewFn", path.join(__dirname, "../lambdas/translateMovieReview.ts"));
+    const getAllMovieReviewsFn = this.createLambda("getAllMovieReviewsFn", "../lambdas/getAllMovieReviews.ts", {
+      ...lambdaEnvironment,
+      GSI_REVIEWER_INDEX: "ReviewerIndex",
+
+    });
+    const getMovieReviewByIdFn = this.createLambda("getMovieReviewByIdFn", "../lambdas/getMovieReviewById.ts", lambdaEnvironment);
+    const addMovieReviewFn = this.createLambda("AddMovieReviewFn", "../lambdas/addMovieReview.ts", lambdaEnvironment);
+    const updateMovieReviewFn = this.createLambda("UpdateMovieReviewFn", "../lambdas/updateMovieReview.ts", lambdaEnvironment);
+    const translateMovieReviewFn = this.createLambda("TranslateMovieReviewFn", "../lambdas/translateMovieReview.ts", lambdaEnvironment);
 
     // Grant permissions
-    movieReviewsTable.grantReadData(getAllMovieReviewsFn);
-    movieReviewsTable.grantReadData(getMovieReviewByIdFn);
-    movieReviewsTable.grantReadWriteData(addMovieReviewFn);
-    movieReviewsTable.grantReadWriteData(updateMovieReviewFn);
-    movieReviewsTable.grantReadWriteData(translateMovieReviewFn);
+    movieReviewsTable.table.grantReadData(getAllMovieReviewsFn);
+    movieReviewsTable.table.grantReadData(getMovieReviewByIdFn);
+    movieReviewsTable.table.grantReadWriteData(addMovieReviewFn);
+    movieReviewsTable.table.grantReadWriteData(updateMovieReviewFn);
+    movieReviewsTable.table.grantReadWriteData(translateMovieReviewFn);
 
     translateMovieReviewFn.addToRolePolicy(
       new PolicyStatement({
@@ -110,8 +95,6 @@ export class AppAPI extends Construct {
         resources: ["*"],
       })
     );
-
-    // REST API Setup
 
    // Create API Gateway
    const appApi = new apig.RestApi(this, "MovieReviewsAPI", {
@@ -149,4 +132,15 @@ export class AppAPI extends Construct {
 
     }
 
+    private createLambda(id: string, entry: string, environment: Record<string, string>) {
+      return new lambdanode.NodejsFunction(this, id, {
+        entry: path.join(__dirname, entry),
+        handler: "handler",
+        runtime: lambda.Runtime.NODEJS_22_X,
+        architecture: lambda.Architecture.ARM_64,
+        memorySize: 128,
+        timeout: cdk.Duration.seconds(10),
+        environment,
+      });
+    }
   }
