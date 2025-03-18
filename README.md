@@ -41,7 +41,7 @@ The structure of a table item that includes review translations:
 
 #### Custom L2 Construct
 
-1. AuthApi (auth-app.ts)
+##### 1. AuthApi (auth-app.ts)
 
 A custom L2 construct that sets up the authentication API:
 
@@ -53,7 +53,7 @@ A custom L2 construct that sets up the authentication API:
   - Sign out
 - Configures API routes for each authentication operation
 
-2. AppAPI (app-api.ts)
+##### 2. AppAPI (app-api.ts)
 
 A custom L2 construct that establishes the main application API:
 
