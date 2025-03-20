@@ -12,7 +12,7 @@ This repository contains a serverless REST API for Movie Reviews implemented usi
 
 + GET /movies/all-reviews - Get all movie reviews. Supports optional query parameter for filtering by reviewerId.
 
-+ GET /movies/{movieId}/reviews - Get all reviews for a specific movie. Supports optional query parameter for filtering by reviewerId.
++ GET /movies/{movieId}/reviews - Get all reviews for a specific movie. Supports optional query parameter for filtering by reviewerId and/or reviewId.
 
 + POST /movies/{movieId}/reviews - Add a new movie review. Requires authentication.
 

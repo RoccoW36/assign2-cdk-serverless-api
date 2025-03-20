@@ -1,6 +1,6 @@
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 
 const ddbClient = new DynamoDBClient({ region: process.env.REGION });
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
@@ -11,10 +11,11 @@ const GSI_REVIEWER_INDEX = "ReviewerIndex";
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   try {
     console.log("[EVENT]", JSON.stringify(event));
-
+ 
     const pathParameters = event?.pathParameters;
     const movieId = pathParameters?.movieId ? parseInt(pathParameters.movieId) : undefined;
     const reviewerId = event.queryStringParameters?.reviewerId;
+    const reviewId = event.queryStringParameters?.reviewId ? parseInt(event.queryStringParameters.reviewId) : undefined;
 
     if (!movieId) {
       return {
@@ -23,10 +24,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         body: JSON.stringify({ message: "Missing movieId in request" }),
       };
     }
-
     let response;
-
-    if (reviewerId) {
+ 
+    if (reviewId) {
+      // If reviewId is provided, fetch the specific review
+      const getCommand = new GetCommand({
+        TableName: TABLE_NAME,
+        Key: { movieId, reviewId },
+      });
+      const result = await ddbDocClient.send(getCommand);
+      response = { Items: result.Item ? [result.Item] : [] };
+    } else if (reviewerId) {
       // Query using the GSI with movieId and reviewerId
       response = await ddbDocClient.send(
         new QueryCommand({
@@ -49,7 +57,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         })
       );
     }
-
+ 
     if (!response.Items || response.Items.length === 0) {
       return {
         statusCode: 404,
@@ -57,7 +65,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         body: JSON.stringify({ message: "No reviews found for this movie" }),
       };
     }
-
+ 
     return {
       statusCode: 200,
       headers: { "content-type": "application/json" },
