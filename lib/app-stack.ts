@@ -4,7 +4,7 @@ import { UserPool } from "aws-cdk-lib/aws-cognito";
 import { AuthApi } from './auth-api';
 import { AppAPI } from './app-api';
 
-export class AuthAppStack extends cdk.Stack {
+export class AppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
