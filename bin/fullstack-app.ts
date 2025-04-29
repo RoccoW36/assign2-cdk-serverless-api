@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
-import { AppStack } from "../lib/app-stack";
+import { FullStackApp } from "../lib/fullstack-app-stack";
 
 const app = new cdk.App();
-new AppStack(app, "MyAppStack", { env: { region: "eu-west-1" } });
+
+new FullStackApp(app, "FullStackApp", {
+  env: { region: "eu-west-1" },
+});

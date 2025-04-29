@@ -10,6 +10,7 @@ export class AuthApi extends Construct {
   private readonly userPoolId: string;
   private readonly userPoolClientId: string;
   private readonly auth: apigateway.IResource;
+  public readonly authUrl: string;
 
   constructor(scope: Construct, id: string, props: AuthApiProps) {
     super(scope, id);
@@ -29,14 +30,14 @@ export class AuthApi extends Construct {
     });
 
     // Initialize the `auth` resource under the root of the API
-    this.auth = api.root.addResource("auth");
+    this.auth = api.root.addResource("auth"); 
+    this.authUrl = `${api.url}auth`;
 
     // Define the routes for authentication (signup, signin, etc.)
     this.addAuthRoute(api, "signup", "signup");
     this.addAuthRoute(api, "signin", "signin");
     this.addAuthRoute(api, "confirm_signup", "confirm-signup");
     this.addAuthRoute(api, "signout", "signout");
-
   }
 
   private addAuthRoute(api: apigateway.RestApi, resourceName: string, functionName: string): void {
@@ -54,7 +55,6 @@ export class AuthApi extends Construct {
       },
     });
 
-    // Add the resource with the correct path
     const resource = this.auth.addResource(resourceName);
     resource.addMethod("POST", new apigateway.LambdaIntegration(lambdaFn));
   }

@@ -12,6 +12,8 @@ import { AppApiProps } from "../shared/types";
 import { MovieReviewsTable } from "./movie-reviews-table";
 
 export class AppAPI extends Construct {
+  public readonly apiUrl: string;
+
   constructor(scope: Construct, id: string, props: AppApiProps) {
     super(scope, id);
 
@@ -99,15 +101,15 @@ export class AppAPI extends Construct {
    // Create API Gateway
    const appApi = new apig.RestApi(this, "MovieReviewsAPI", {
     description: "Movie Reviews Api",
-    deployOptions: { 
-      stageName: "dev" 
-    },
+    deployOptions: { stageName: "dev" },
     endpointTypes: [apig.EndpointType.REGIONAL],
     defaultCorsPreflightOptions: {
       allowOrigins: apig.Cors.ALL_ORIGINS,
     },
   });
 
+  this.apiUrl = appApi.url;
+  
     // Define API Resources
     const movieReviewsEndpoint = appApi.root.addResource("movies");
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
