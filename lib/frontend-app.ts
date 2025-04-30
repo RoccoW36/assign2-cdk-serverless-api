@@ -17,6 +17,7 @@ export class FrontendApp extends Construct {
     // S3 Bucket for storing the frontend assets
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
       publicReadAccess: false,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
