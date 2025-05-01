@@ -1,4 +1,4 @@
-import { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import { APIGatewayProxyHandlerV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import {
   CognitoIdentityProviderClient,
   ConfirmSignUpCommand,
@@ -16,16 +16,34 @@ const isValidBodyParams = ajv.compile(
 
 const client = new CognitoIdentityProviderClient({ region: process.env.REGION });
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandlerV2 = async (
+  event
+): Promise<APIGatewayProxyResultV2> => {
   try {
-    console.log("[EVENT]",JSON.stringify(event));
+    console.log("[EVENT STRUCTURE]", JSON.stringify(event, null, 2));
+
+    // Handle CORS preflight request safely
+    if (event?.requestContext?.http?.method === "OPTIONS") {
+      return {
+        statusCode: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "OPTIONS, POST",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+        body: JSON.stringify({ message: "CORS preflight successful" }),
+      };
+    }
+
     const body = event.body ? JSON.parse(event.body) : undefined;
 
     if (!isValidBodyParams(body)) {
+      console.log("[Invalid Body]", body);
       return {
-        statusCode: 500,
+        statusCode: 400,
         headers: {
-          "content-type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           message: `Incorrect type. Must match ConfirmSignUpBody schema`,
@@ -33,6 +51,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }),
       };
     }
+
     const confirmSignUpBody = body as ConfirmSignUpBody;
 
     const params: ConfirmSignUpCommandInput = {
@@ -46,17 +65,32 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     return {
       statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS, POST",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         message: `User ${confirmSignUpBody.username} successfully confirmed`,
         confirmed: true,
       }),
     };
   } catch (err) {
+    console.error("[ERROR]", err);
+
+    // Type-safe error handling
+    const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        message: err,
-      }),
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS, POST",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: errorMessage }),
     };
   }
 };
