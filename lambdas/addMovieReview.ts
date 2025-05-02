@@ -1,5 +1,5 @@
-import { APIGatewayProxyHandler } from "aws-lambda";
-import { CookieMap, parseCookies, verifyToken, JwtToken, createPolicy } from "../shared/util";
+import { APIGatewayProxyHandler, APIGatewayProxyResult } from "aws-lambda";
+import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
@@ -11,8 +11,21 @@ const ddbDocClient = createDDbDocClient();
 
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
-export const handler: APIGatewayProxyHandler = async (event) => {
+export const handler: APIGatewayProxyHandler = async (event): Promise<APIGatewayProxyResult> => {
   try {
+    // Handle CORS preflight request
+    if (event.httpMethod === "OPTIONS") {
+      return {
+        statusCode: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "OPTIONS, POST",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+        body: JSON.stringify({ message: "CORS preflight successful" }),
+      };
+    }
+
     console.log("Event: ", JSON.stringify(event));
 
     // Extract and verify authentication token from cookies
@@ -20,7 +33,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     if (!cookies?.token) {
       return {
         statusCode: 401,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
       };
     }
@@ -36,7 +52,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       console.error("JWT Verification failed: ", err);
       return {
         statusCode: 403,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         body: JSON.stringify({ message: "Forbidden: Invalid token" }),
       };
     }
@@ -48,7 +67,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     if (!movieId || isNaN(Number(movieId))) {
       return {
         statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         body: JSON.stringify({ message: "Invalid movieId. It must be a valid number." }),
       };
     }
@@ -58,7 +80,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     if (!body) {
       return {
         statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         body: JSON.stringify({ message: "Missing request body" }),
       };
     }
@@ -66,7 +91,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     if (!isValidBodyParams(body)) {
       return {
         statusCode: 400,
-        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
         body: JSON.stringify({ message: "Invalid request body", schema: schema.definitions["MovieReview"] }),
       };
     }
@@ -97,14 +125,20 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
     return {
       statusCode: 201,
-      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { 
+        "Content-Type": "application/json", 
+        "Access-Control-Allow-Origin": "*" 
+      },
       body: JSON.stringify({ message: "Review added successfully", reviewId }),
     };
   } catch (error: any) {
     console.error("Error adding review: ", error);
     return {
       statusCode: 500,
-      headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+      headers: { 
+        "Content-Type": "application/json", 
+        "Access-Control-Allow-Origin": "*" 
+      },
       body: JSON.stringify({ message: "Internal Server Error", error: error.message }),
     };
   }
