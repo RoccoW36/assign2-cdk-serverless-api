@@ -18,7 +18,6 @@ export class AuthApi extends Construct {
     this.userPoolId = props.userPoolId;
     this.userPoolClientId = props.userPoolClientId;
 
-    // Create a new API Gateway instance for Auth API
     const api = new apigateway.RestApi(this, "AuthServiceApi", {
       restApiName: "Auth API",
       deployOptions: { stageName: "dev" },
@@ -26,14 +25,14 @@ export class AuthApi extends Construct {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["OPTIONS", "POST"],
         allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
+        allowCredentials: true, //added
       },
     });
 
-    // Initialize the `auth` resource under the root of the API
     this.auth = api.root.addResource("auth"); 
     this.authUrl = `${api.url}auth`;
 
-    // Define the routes for authentication (signup, signin, etc.)
+  
     this.addAuthRoute(api, "signup", "signup");
     this.addAuthRoute(api, "signin", "signin");
     this.addAuthRoute(api, "confirm_signup", "confirm-signup");

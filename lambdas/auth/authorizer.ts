@@ -2,28 +2,48 @@ import { APIGatewayRequestAuthorizerHandler } from "aws-lambda";
 import { CookieMap, createPolicy, parseCookies, verifyToken } from "../../shared/util";
 
 export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
-  console.log("[EVENT]", event, null, 2);
+  console.log("[EVENT RECEIVED]", JSON.stringify(event, null, 2));
 
-  // Parse cookies
   const cookies: CookieMap = parseCookies(event);
+  const authHeader = event.headers?.Authorization || event.headers?.authorization;
 
-  if (!cookies || !cookies.token) {
-    console.error("No cookies or token found.");
+  console.log("[HEADERS RECEIVED]", JSON.stringify(event.headers, null, 2));
+  console.log("[COOKIES RECEIVED]", JSON.stringify(cookies, null, 2));
+
+  // Extract token: Try cookie first, then Authorization header
+  const token = cookies?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+  console.log("[EXTRACTED TOKEN]", token);
+
+  if (!token) {
+    console.error("No token found in cookies or Authorization header.");
     return {
-      principalId: "unauthorised",
+      principalId: "unauthorized",
       policyDocument: createPolicy(event, "Deny"),
     };
   }
 
-  // Verify the JWT token
-  const verifiedJwt = await verifyToken(
-    cookies.token, 
-    process.env.USER_POOL_ID, 
-    process.env.REGION!
-  );
+  try {
+    const verifiedJwt = await verifyToken(token, process.env.USER_POOL_ID!, process.env.REGION!);
 
-  return {
-    principalId: verifiedJwt ? verifiedJwt.sub!.toString() : "", 
-    policyDocument: createPolicy(event, verifiedJwt ? "Allow" : "Deny"),
-  };
+    if (!verifiedJwt) {
+      console.error("JWT verification failed: Token is invalid.");
+      return {
+        principalId: "unauthorized",
+        policyDocument: createPolicy(event, "Deny"),
+      };
+    }
+
+    console.log("[VERIFIED JWT]", JSON.stringify(verifiedJwt, null, 2));
+
+    return {
+      principalId: verifiedJwt.sub!,
+      policyDocument: createPolicy(event, "Allow"),
+    };
+  } catch (err) {
+    console.error("JWT Verification failed:", err);
+    return {
+      principalId: "unauthorized",
+      policyDocument: createPolicy(event, "Deny"),
+    };
+  }
 };
