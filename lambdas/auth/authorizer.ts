@@ -4,46 +4,54 @@ import { CookieMap, createPolicy, parseCookies, verifyToken } from "../../shared
 export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
   console.log("[EVENT RECEIVED]", JSON.stringify(event, null, 2));
 
+  // Parse cookies
   const cookies: CookieMap = parseCookies(event);
-  const authHeader = event.headers?.Authorization || event.headers?.authorization;
 
-  console.log("[HEADERS RECEIVED]", JSON.stringify(event.headers, null, 2));
-  console.log("[COOKIES RECEIVED]", JSON.stringify(cookies, null, 2));
-
-  // Extract token: Try cookie first, then Authorization header
-  const token = cookies?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
-  console.log("[EXTRACTED TOKEN]", token);
-
-  if (!token) {
-    console.error("No token found in cookies or Authorization header.");
+  if (!cookies || !cookies.token) {
+    console.warn("⚠️ No authentication token found in cookies.");
     return {
-      principalId: "unauthorized",
+      principalId: "unauthorised",
       policyDocument: createPolicy(event, "Deny"),
     };
   }
 
+  // Validate environment variables
+  if (!process.env.USER_POOL_ID || !process.env.REGION) {
+    console.error("❌ Missing required environment variables.");
+    return {
+      principalId: "unauthorised",
+      policyDocument: createPolicy(event, "Deny"),
+    };
+  }
+
+  let verifiedJwt;
   try {
-    const verifiedJwt = await verifyToken(token, process.env.USER_POOL_ID!, process.env.REGION!);
-
-    if (!verifiedJwt) {
-      console.error("JWT verification failed: Token is invalid.");
-      return {
-        principalId: "unauthorized",
-        policyDocument: createPolicy(event, "Deny"),
-      };
-    }
-
-    console.log("[VERIFIED JWT]", JSON.stringify(verifiedJwt, null, 2));
-
-    return {
-      principalId: verifiedJwt.sub!,
-      policyDocument: createPolicy(event, "Allow"),
-    };
+    console.log("🔍 Verifying JWT...");
+    verifiedJwt = await verifyToken(cookies.token, process.env.USER_POOL_ID, process.env.REGION!);
   } catch (err) {
-    console.error("JWT Verification failed:", err);
+    console.error("❌ JWT verification failed:", err);
     return {
-      principalId: "unauthorized",
+      principalId: "unauthorised",
       policyDocument: createPolicy(event, "Deny"),
     };
   }
+
+  if (!verifiedJwt) {
+    console.error("⛔ Token is invalid.");
+    return {
+      principalId: "unauthorised",
+      policyDocument: createPolicy(event, "Deny"),
+    };
+  }
+
+  console.log("[VERIFIED JWT]", JSON.stringify(verifiedJwt, null, 2));
+
+  return {
+    principalId: verifiedJwt.sub!,
+    policyDocument: createPolicy(event, "Allow"),
+    context: {
+      userId: verifiedJwt.sub!,
+      email: verifiedJwt.email!,
+    },
+  };
 };

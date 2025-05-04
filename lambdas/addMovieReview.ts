@@ -12,7 +12,7 @@ const ddbDocClient = createDDbDocClient();
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://d3gvkkpvjbyzvp.cloudfront.net",
   "Access-Control-Allow-Methods": "OPTIONS, POST",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Credentials": "true",
@@ -33,14 +33,13 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
     // Extract authentication token from either cookies or Authorization header
     const cookies: CookieMap = parseCookies(event);
     const authHeader = event.headers?.Authorization || event.headers?.authorization;
-
     const token = cookies?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
     if (!token) {
       console.error("No token found in cookies or Authorization header.");
       return {
         statusCode: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
       };
     }
@@ -52,7 +51,7 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
       console.error("JWT Verification failed: ", err);
       return {
         statusCode: 403,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Forbidden: Invalid token" }),
       };
     }
@@ -63,7 +62,7 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
     if (!movieId || isNaN(Number(movieId))) {
       return {
         statusCode: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Invalid movieId. It must be a valid number." }),
       };
     }
@@ -72,7 +71,7 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
     if (!body || !isValidBodyParams(body)) {
       return {
         statusCode: 400,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Invalid request body", schema: schema.definitions["MovieReview"] }),
       };
     }
@@ -92,14 +91,14 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
 
     return {
       statusCode: 201,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Review added successfully", reviewId }),
     };
   } catch (error: any) {
     console.error("Error adding review: ", error);
     return {
       statusCode: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Internal Server Error", error: error.message }),
     };
   }

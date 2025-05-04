@@ -15,24 +15,26 @@ const client = new CognitoIdentityProviderClient({
   region: process.env.REGION,
 });
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://d3gvkkpvjbyzvp.cloudfront.net",
+  "Access-Control-Allow-Methods": "OPTIONS, POST",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Credentials": "true",
+};
+
 export const handler: APIGatewayProxyHandlerV2 = async (
   event
 ): Promise<APIGatewayProxyResultV2> => {
   try {
-    console.log("[EVENT]", JSON.stringify(event));
-
-    // Handle CORS preflight request
     if (event?.requestContext?.http?.method === "OPTIONS") {
       return {
         statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "OPTIONS, POST",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
+        headers: corsHeaders,
         body: JSON.stringify({ message: "CORS preflight successful" }),
       };
     }
+
+    console.log("[EVENT]", JSON.stringify(event));
 
     const body = event.body ? JSON.parse(event.body) : undefined;
 
@@ -40,12 +42,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (
       console.log("[Invalid Body]", body);
       return {
         statusCode: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: `Incorrect type. Must match SignInBody schema`,
+          message: "Incorrect type. Must match SignInBody schema",
           schema: schema.definitions["SignInBody"],
         }),
       };
@@ -64,16 +63,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (
 
     const command = new InitiateAuthCommand(params);
     const { AuthenticationResult } = await client.send(command);
-    
+
     console.log("Auth Result:", AuthenticationResult);
 
     if (!AuthenticationResult || !AuthenticationResult.IdToken) {
       return {
         statusCode: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ message: "User signin failed" }),
       };
     }
@@ -83,11 +79,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (
     return {
       statusCode: 200,
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS, POST",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Set-Cookie": `token=${token}; SameSite=None; Secure; HttpOnly; Path=/; Max-Age=3600;`,
+        ...corsHeaders,
         "Content-Type": "application/json",
+        "Set-Cookie": `token=${token}; Path=/; Secure; HttpOnly; SameSite=None; Max-Age=3600`,
+
       },
       body: JSON.stringify({
         message: "Auth successful",
@@ -101,12 +96,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (
 
     return {
       statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS, POST",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Content-Type": "application/json",
-      },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ message: errorMessage }),
     };
   }
