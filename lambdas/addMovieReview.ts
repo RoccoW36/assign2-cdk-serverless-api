@@ -12,7 +12,7 @@ const ddbDocClient = createDDbDocClient();
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://d3gvkkpvjbyzvp.cloudfront.net",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "OPTIONS, POST",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Credentials": "true",

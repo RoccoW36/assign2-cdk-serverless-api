@@ -1,4 +1,4 @@
-## Enterprise Web Development module - Serverless REST Assignment.
+## Enterprise Web Development module - Serverless API Assignment.
 
 __Name:__ Martin Walsh
 
