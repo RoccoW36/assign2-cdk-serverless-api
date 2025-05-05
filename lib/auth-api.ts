@@ -25,7 +25,7 @@ export class AuthApi extends Construct {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: ["OPTIONS", "POST"],
         allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
-        allowCredentials: true, //added
+        allowCredentials: true,
       },
     });
 

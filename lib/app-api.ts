@@ -103,9 +103,16 @@ export class AppAPI extends Construct {
     description: "Movie Reviews Api",
     deployOptions: { stageName: "dev" },
     endpointTypes: [apig.EndpointType.REGIONAL],
-    defaultCorsPreflightOptions: {
-      allowOrigins: apig.Cors.ALL_ORIGINS,
-    },
+       defaultCorsPreflightOptions: {
+        allowOrigins: ["*"],
+        allowHeaders: [
+          "Content-Type",
+          "X-Amz-Date",
+          "Authorization",
+          "X-Api-Key",
+        ],
+        allowMethods: ["OPTIONS", "GET", "POST", "PUT", "DELETE", "PATCH"],
+      },
   });
 
   this.apiUrl = appApi.url;
