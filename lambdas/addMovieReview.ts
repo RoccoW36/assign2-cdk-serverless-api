@@ -1,5 +1,5 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
-import { verifyToken, JwtToken } from "../shared/util";
+import { CookieMap, parseCookies, verifyToken, JwtToken, createPolicy } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
@@ -15,11 +15,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
   try {
     console.log("Event: ", JSON.stringify(event));
 
-    // Extract token from Authorization header
-    const authHeader = event.headers?.Authorization || event.headers?.authorization;
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-    if (!token) {
+    // Extract and verify authentication token from cookies
+    const cookies: CookieMap = parseCookies(event);
+    if (!cookies?.token) {
       return {
         statusCode: 401,
         headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -27,10 +25,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
       };
     }
 
-    // Verify token
     let verifiedJwt: JwtToken;
     try {
-      verifiedJwt = await verifyToken(token, process.env.USER_POOL_ID!, process.env.REGION!);
+      verifiedJwt = await verifyToken(
+        cookies.token,
+        process.env.USER_POOL_ID!,
+        process.env.REGION!
+      );
     } catch (err) {
       console.error("JWT Verification failed: ", err);
       return {
@@ -54,7 +55,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
     // Parse and validate request body
     const body = event.body ? JSON.parse(event.body) : undefined;
-    if (!body || !isValidBodyParams(body)) {
+    if (!body) {
+      return {
+        statusCode: 400,
+        headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ message: "Missing request body" }),
+      };
+    }
+
+    if (!isValidBodyParams(body)) {
       return {
         statusCode: 400,
         headers: { "content-type": "application/json", "Access-Control-Allow-Origin": "*" },
