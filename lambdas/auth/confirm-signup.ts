@@ -22,7 +22,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (
   try {
     console.log("[EVENT STRUCTURE]", JSON.stringify(event, null, 2));
 
-    // Handle CORS preflight request safely
     if (event?.requestContext?.http?.method === "OPTIONS") {
       return {
         statusCode: 200,
@@ -79,7 +78,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (
   } catch (err) {
     console.error("[ERROR]", err);
 
-    // Type-safe error handling
     const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
 
     return {
