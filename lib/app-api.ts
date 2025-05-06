@@ -17,7 +17,6 @@ export class AppAPI extends Construct {
   constructor(scope: Construct, id: string, props: AppApiProps) {
     super(scope, id);
 
-    // Common Lambda properties
     const appCommonFnProps = {
       architecture: lambda.Architecture.ARM_64,
       timeout: cdk.Duration.seconds(10),
@@ -30,12 +29,10 @@ export class AppAPI extends Construct {
       },
     };
 
-    // Create DynamoDB Table using custom construct
     const movieReviewsTable = new MovieReviewsTable(this, "MovieReviewsTable", {
       tableName: "MovieReviews",
     });
 
-    // Seed Data using custom resource
     new custom.AwsCustomResource(this, "reviewsddbInitData", {
       onCreate: {
         service: "DynamoDB",
@@ -52,39 +49,31 @@ export class AppAPI extends Construct {
       }),
     });
 
-    // Create Lambda Authorizer
-    const authorizerFn =  new lambdanode.NodejsFunction(this, "AuthorizerFn", {
+    const authorizerFn = new lambdanode.NodejsFunction(this, "AuthorizerFn", {
       ...appCommonFnProps,
       entry: "./lambdas/auth/authorizer.ts",
     });
 
-    const requestAuthorizer = new apig.RequestAuthorizer(
-      this, "RequestAuthorizer", 
-      {
+    const requestAuthorizer = new apig.RequestAuthorizer(this, "RequestAuthorizer", {
       identitySources: [apig.IdentitySource.header("cookie")],
       handler: authorizerFn,
       resultsCacheTtl: cdk.Duration.minutes(0),
-    }
-  );
+    });
 
-    // Update environment variables for Lambda functions
     const lambdaEnvironment = {
       ...appCommonFnProps.environment,
       TABLE_NAME: movieReviewsTable.table.tableName,
     };
 
-    // Define Lambda functions
     const getAllMovieReviewsFn = this.createLambda("getAllMovieReviewsFn", "../lambdas/getAllMovieReviews.ts", {
       ...lambdaEnvironment,
       GSI_REVIEWER_INDEX: "ReviewerIndex",
-
     });
     const getMovieReviewByIdFn = this.createLambda("getMovieReviewByIdFn", "../lambdas/getMovieReviewById.ts", lambdaEnvironment);
     const addMovieReviewFn = this.createLambda("AddMovieReviewFn", "../lambdas/addMovieReview.ts", lambdaEnvironment);
     const updateMovieReviewFn = this.createLambda("UpdateMovieReviewFn", "../lambdas/updateMovieReview.ts", lambdaEnvironment);
     const translateMovieReviewFn = this.createLambda("TranslateMovieReviewFn", "../lambdas/translateMovieReview.ts", lambdaEnvironment);
 
-    // Grant permissions
     movieReviewsTable.table.grantReadData(getAllMovieReviewsFn);
     movieReviewsTable.table.grantReadData(getMovieReviewByIdFn);
     movieReviewsTable.table.grantReadWriteData(addMovieReviewFn);
@@ -98,58 +87,101 @@ export class AppAPI extends Construct {
       })
     );
 
-   // Create API Gateway
-   const appApi = new apig.RestApi(this, "MovieReviewsAPI", {
-    description: "Movie Reviews Api",
-    deployOptions: { stageName: "dev" },
-    endpointTypes: [apig.EndpointType.REGIONAL],
-       defaultCorsPreflightOptions: {
-        allowOrigins: ["*"],
-        allowHeaders: [
-          "Content-Type",
-          "X-Amz-Date",
-          "Authorization",
-          "X-Api-Key",
-        ],
-        allowMethods: ["OPTIONS", "GET", "POST", "PUT", "DELETE", "PATCH"],
-      },
-  });
+    const appApi = new apig.RestApi(this, "MovieReviewsAPI", {
+      description: "Movie Reviews Api",
+      deployOptions: { stageName: "dev" },
+      endpointTypes: [apig.EndpointType.REGIONAL],
+    });
 
-  this.apiUrl = appApi.url;
-  
-    // Define API Resources
+    this.apiUrl = appApi.url;
+
     const movieReviewsEndpoint = appApi.root.addResource("movies");
     const specificMovieEndpoint = movieReviewsEndpoint.addResource("{movieId}");
     const movieReviewsByMovieId = specificMovieEndpoint.addResource("reviews");
     const reviewResource = movieReviewsByMovieId.addResource("{reviewId}");
     const translateReviewResource = reviewResource.addResource("translate").addResource("{language}");
 
-    // API Gateway Methods
     const allReviewsResource = movieReviewsEndpoint.addResource("all-reviews");
     allReviewsResource.addMethod("GET", new apig.LambdaIntegration(getAllMovieReviewsFn, { proxy: true }));
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
+
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
       authorizer: requestAuthorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,  
+      authorizationType: apig.AuthorizationType.CUSTOM,
+      methodResponses: [
+        {
+          statusCode: "200",
+          responseParameters: {
+          "method.response.header.Access-Control-Allow-Origin": true, 
+          "method.response.header.Access-Control-Allow-Credentials": true,
+          },
+        },
+      ],
     });
-
+    
     reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
       authorizer: requestAuthorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,  
+      authorizationType: apig.AuthorizationType.CUSTOM,
+      methodResponses: [
+        {
+          statusCode: "200",
+          responseParameters: {
+            "method.response.header.Access-Control-Allow-Origin": true, 
+            "method.response.header.Access-Control-Allow-Credentials": true,
+          },
+        },
+      ],
     });
+    
 
-    }
-
-    private createLambda(id: string, entry: string, environment: Record<string, string>) {
-      return new lambdanode.NodejsFunction(this, id, {
-        entry: path.join(__dirname, entry),
-        handler: "handler",
-        runtime: lambda.Runtime.NODEJS_22_X,
-        architecture: lambda.Architecture.ARM_64,
-        memorySize: 128,
-        timeout: cdk.Duration.seconds(10),
-        environment,
-      });
-    }
+    // Add CORS to resources
+    this.addCorsOptions(movieReviewsByMovieId);
+    this.addCorsOptions(reviewResource);
+    this.addCorsOptions(translateReviewResource);
   }
+
+  private createLambda(id: string, entry: string, environment: Record<string, string>) {
+    return new lambdanode.NodejsFunction(this, id, {
+      entry: path.join(__dirname, entry),
+      handler: "handler",
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(10),
+      environment,
+    });
+  }
+
+  // CORS helper for credentials: 'include' support
+  private addCorsOptions(resource: apig.IResource) {
+    resource.addMethod("OPTIONS", new apig.MockIntegration({
+      integrationResponses: [{
+        statusCode: "200",
+        responseParameters: {
+          "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization'",
+          "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,POST,PUT,DELETE'",
+          "method.response.header.Access-Control-Allow-Origin": "'true'",
+          "method.response.header.Access-Control-Allow-Credentials": "'true'",
+        },
+        responseTemplates: {
+          "application/json": '{"status":"CORS preflight success"}',
+        },
+      }],
+      passthroughBehavior: apig.PassthroughBehavior.NEVER,
+      requestTemplates: {
+        "application/json": '{"statusCode": 200}',
+      },
+    }), {
+      methodResponses: [{
+        statusCode: "200",
+        responseParameters: {
+          "method.response.header.Access-Control-Allow-Headers": true,
+          "method.response.header.Access-Control-Allow-Methods": true,
+          "method.response.header.Access-Control-Allow-Origin": true,
+          "method.response.header.Access-Control-Allow-Credentials": true,
+        },
+      }],
+    });
+  }
+}

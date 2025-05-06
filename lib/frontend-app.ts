@@ -14,46 +14,46 @@ export class FrontendApp extends Construct {
   constructor(scope: Construct, id: string, props: FrontendAppProps) {
     super(scope, id);
 
-    // S3 Bucket for storing the frontend assets
-    const siteBucket = new s3.Bucket(this, "SiteBucket", {
+    const siteDomain = `mymoviesapp-${this.node.addr}`;
+
+    const source = new s3.Bucket(this, "source", {
+      bucketName: siteDomain,
       publicReadAccess: false,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
-    // CloudFront Distribution for serving the S3 assets
     const distribution = new cloudfront.Distribution(this, "SiteDistribution", {
-      defaultRootObject: "index.html", // default root object
+      defaultRootObject: "index.html",
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       defaultBehavior: {
-        origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(siteBucket, {
-          originAccessLevels: [cloudfront.AccessLevel.READ], // Access level configuration
+        origin: cloudfront_origins.S3BucketOrigin.withOriginAccessControl(source, {
+          originAccessLevels: [cloudfront.AccessLevel.READ],
         }),
-        compress: true, // Enable compression for assets
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS, // Redirect HTTP to HTTPS
+    
+        compress: true,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
     });
 
-    // Configuration for API URLs to be included in frontend deployment
     const config = {
       apiUrl: props.apiUrl,
       authUrl: props.authUrl,
     };
 
-    // Deploy the frontend assets to S3 and invalidate CloudFront distribution
     new s3deploy.BucketDeployment(this, "DeployFrontend", {
       sources: [
-        s3deploy.Source.asset("./dist"), // Path to the build folder
-        s3deploy.Source.jsonData("config.json", config), // Config file with API and Auth URLs
+        s3deploy.Source.asset("./dist"),
+        s3deploy.Source.jsonData("config.json", config),
       ],
-      destinationBucket: siteBucket, // Destination S3 bucket
-      distribution, // CloudFront distribution to invalidate
-      distributionPaths: ["/*"], // Invalidate all files in CloudFront
+      destinationBucket: source,
+      distribution,
+      distributionPaths: ["/*"],
     });
 
-    // Output the CloudFront URL (where the frontend is served)
     new CfnOutput(this, "CloudFrontUrl", {
-      value: `https://${distribution.distributionDomainName}`, // CloudFront distribution URL
+      value: `https://${distribution.distributionDomainName}`,
     });
   }
 }
