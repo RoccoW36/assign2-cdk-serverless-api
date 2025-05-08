@@ -31,9 +31,9 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
 
     console.log("Event: ", JSON.stringify(event));
 
-    const cookies: CookieMap = parseCookies(event);
-    const authHeader = event.headers?.Authorization || event.headers?.authorization;
-    const token = cookies?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+    // const cookies: CookieMap = parseCookies(event);
+    const authHeader = event.headers?.Authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
 
     if (!token) {
       console.error("No token found in cookies or Authorization header.");
