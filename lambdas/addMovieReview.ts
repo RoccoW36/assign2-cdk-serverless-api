@@ -11,27 +11,16 @@ const ddbDocClient = createDDbDocClient();
 
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
-const getCorsHeaders = (origin: string | undefined): Record<string, string> => {
-  const allowedOrigins = ["https://d1mbsrvczvnasm.cloudfront.net"];
-  const isAllowed = origin && allowedOrigins.includes(origin);
-
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Methods": "OPTIONS, POST",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Credentials": "true",
-  };
-
-  if (isAllowed && origin) {
-    headers["Access-Control-Allow-Origin"] = origin;
-  }
-
-  return headers;
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Methods": "OPTIONS, POST",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Allow-Origin": "https://d21ir17suqf2pn.cloudfront.net"
 };
 
 export const handler: APIGatewayProxyHandler = async (event): Promise<APIGatewayProxyResult> => {
-  const corsHeaders = getCorsHeaders(event.headers.origin);
-
   try {
+    //preflight is actually handled by API Gateway, not necessary here
     if (event.httpMethod === "OPTIONS") {
       return {
         statusCode: 200,
