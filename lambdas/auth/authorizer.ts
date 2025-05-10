@@ -6,7 +6,14 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
 
   const cookies: CookieMap = parseCookies(event);
 
-  if (!cookies || !cookies.token) {
+  var token = cookies?.token
+
+  if (!token) {
+    const authHeader = event.headers?.Authorization
+    token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : undefined
+  }
+
+  if (!token) {
     console.warn("No authentication token found in cookies.");
     return {
       principalId: "unauthorised",
@@ -25,7 +32,7 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event) => {
   let verifiedJwt;
   try {
     console.log("🔍 Verifying JWT...");
-    verifiedJwt = await verifyToken(cookies.token, process.env.USER_POOL_ID, process.env.REGION!);
+    verifiedJwt = await verifyToken(token, process.env.USER_POOL_ID, process.env.REGION!);
   } catch (err) {
     console.error("JWT verification failed:", err);
     return {

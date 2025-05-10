@@ -106,20 +106,19 @@ export class AppAPI extends Construct {
     movieReviewsByMovieId.addMethod("GET", new apig.LambdaIntegration(getMovieReviewByIdFn, { proxy: true }));
     translateReviewResource.addMethod("GET", new apig.LambdaIntegration(translateMovieReviewFn, { proxy: true }));
 
+    // NO AUTH on POST
     movieReviewsByMovieId.addMethod("POST", new apig.LambdaIntegration(addMovieReviewFn, { proxy: true }), {
-      authorizer: requestAuthorizer,
-      authorizationType: apig.AuthorizationType.CUSTOM,
       methodResponses: [
         {
           statusCode: "200",
           responseParameters: {
-          "method.response.header.Access-Control-Allow-Origin": true, 
-          "method.response.header.Access-Control-Allow-Credentials": true,
+            "method.response.header.Access-Control-Allow-Origin": true,
+            "method.response.header.Access-Control-Allow-Credentials": true,
           },
         },
       ],
     });
-    
+
     reviewResource.addMethod("PUT", new apig.LambdaIntegration(updateMovieReviewFn, { proxy: true }), {
       authorizer: requestAuthorizer,
       authorizationType: apig.AuthorizationType.CUSTOM,
@@ -127,15 +126,13 @@ export class AppAPI extends Construct {
         {
           statusCode: "200",
           responseParameters: {
-            "method.response.header.Access-Control-Allow-Origin": true, 
+            "method.response.header.Access-Control-Allow-Origin": true,
             "method.response.header.Access-Control-Allow-Credentials": true,
           },
         },
       ],
     });
-    
 
-    // Add CORS to resources
     this.addCorsOptions(movieReviewsByMovieId);
     this.addCorsOptions(reviewResource);
     this.addCorsOptions(translateReviewResource);
@@ -153,7 +150,6 @@ export class AppAPI extends Construct {
     });
   }
 
-  // CORS helper for credentials: 'include' support
   private addCorsOptions(resource: apig.IResource) {
     resource.addMethod("OPTIONS", new apig.MockIntegration({
       integrationResponses: [{
@@ -161,7 +157,7 @@ export class AppAPI extends Construct {
         responseParameters: {
           "method.response.header.Access-Control-Allow-Headers": "'Content-Type,Authorization'",
           "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,GET,POST,PUT,DELETE'",
-          "method.response.header.Access-Control-Allow-Origin": "'true'",
+          "method.response.header.Access-Control-Allow-Origin": "'*'",
           "method.response.header.Access-Control-Allow-Credentials": "'true'",
         },
         responseTemplates: {

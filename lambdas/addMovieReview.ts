@@ -1,5 +1,4 @@
 import { APIGatewayProxyHandler, APIGatewayProxyResult } from "aws-lambda";
-import { CookieMap, parseCookies, verifyToken, JwtToken } from "../shared/util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import Ajv from "ajv";
@@ -11,26 +10,14 @@ const ddbDocClient = createDDbDocClient();
 
 const generateReviewId = (): number => Math.floor(Math.random() * 1000000);
 
-const getCorsHeaders = (origin: string | undefined): Record<string, string> => {
-  const allowedOrigins = ["https://d1mbsrvczvnasm.cloudfront.net"];
-  const isAllowed = origin && allowedOrigins.includes(origin);
-
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Methods": "OPTIONS, POST",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Credentials": "true",
-  };
-
-  if (isAllowed && origin) {
-    headers["Access-Control-Allow-Origin"] = origin;
-  }
-
-  return headers;
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Methods": "OPTIONS, POST",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Allow-Origin": "*"
 };
 
 export const handler: APIGatewayProxyHandler = async (event): Promise<APIGatewayProxyResult> => {
-  const corsHeaders = getCorsHeaders(event.headers.origin);
-
   try {
     if (event.httpMethod === "OPTIONS") {
       return {
@@ -41,33 +28,6 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
     }
 
     console.log("Event: ", JSON.stringify(event));
-
-    const cookies: CookieMap = parseCookies(event);
-    const authHeader = event.headers?.Authorization || event.headers?.authorization;
-    const token = cookies?.token || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
-
-    if (!token) {
-      console.error("No token found in cookies or Authorization header.");
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Unauthorized request: Missing token" }),
-      };
-    }
-
-    let verifiedJwt: JwtToken;
-    try {
-      verifiedJwt = await verifyToken(token, process.env.USER_POOL_ID!, process.env.REGION!);
-    } catch (err) {
-      console.error("JWT Verification failed: ", err);
-      return {
-        statusCode: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Forbidden: Invalid token" }),
-      };
-    }
-
-    console.log("Verified JWT: ", JSON.stringify(verifiedJwt));
 
     const movieId = event.pathParameters?.movieId;
     if (!movieId || isNaN(Number(movieId))) {
